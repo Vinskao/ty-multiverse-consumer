@@ -1,3 +1,4 @@
+```
 src/
 ├── main/
 │   ├── java/com/vinskao/blackjack/
@@ -23,3 +24,4 @@ src/
     │       ├── BJDeckTest.java
     │       └── BJHandTest.java
     └── resources/
+```
