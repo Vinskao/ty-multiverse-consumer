@@ -1,3 +1,6 @@
+package com.vinskao.blackjack.module;
+import com.vinskao.blackjack.model.Card;
+
 public class BJCard extends Card {
     public BJCard(String suit, String rank){
         super(suit, rank);
