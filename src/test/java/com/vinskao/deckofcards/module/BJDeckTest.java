@@ -1,7 +1,11 @@
-package com.vinskao.blackjack.module;
+package com.vinskao.deckofcards.module;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+
+import com.vinskao.deckofcards.module.blackjack.service.BJCard;
+import com.vinskao.deckofcards.module.blackjack.service.BJDeck;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 class BJDeckTest {

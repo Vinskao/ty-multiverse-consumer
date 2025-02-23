@@ -1,8 +1,8 @@
 ```
 src/
 ├── main/
-│   ├── java/com/vinskao/blackjack/
-│   │   ├── BlackjackApplication.java
+│   ├── java/com/vinskao/deckofcards/
+│   │   ├── deckofcardsApplication.java
 │   │   ├── model/
 │   │   │   ├── Card.java
 │   │   │   └── Deck.java
@@ -15,7 +15,7 @@ src/
 │       ├── static/
 │       └── templates/
 └── test/
-    ├── java/com/vinskao/blackjack/
+    ├── java/com/vinskao/deckofcards/
     │   ├── model/
     │   │   ├── CardTest.java
     │   │   └── DeckTest.java
@@ -25,3 +25,7 @@ src/
     │       └── BJHandTest.java
     └── resources/
 ```
+
+
+http://localhost:8080/deckofcards/swagger-ui.html
+http://localhost:8080/deckofcards/v3/api-docs

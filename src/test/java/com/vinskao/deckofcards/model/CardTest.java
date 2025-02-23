@@ -1,6 +1,9 @@
-package com.vinskao.blackjack.model;
+package com.vinskao.deckofcards.model;
 
 import org.junit.jupiter.api.Test;
+
+import com.vinskao.deckofcards.domain.Card;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 class CardTest {

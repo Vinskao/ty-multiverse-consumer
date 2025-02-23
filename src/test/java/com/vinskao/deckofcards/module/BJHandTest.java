@@ -1,7 +1,11 @@
-package com.vinskao.blackjack.module;
+package com.vinskao.deckofcards.module;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+
+import com.vinskao.deckofcards.module.blackjack.service.BJCard;
+import com.vinskao.deckofcards.module.blackjack.service.BJHand;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 class BJHandTest {
@@ -13,10 +17,10 @@ class BJHandTest {
     }
 
     @Test
-    void testBlackjack() {
+    void testdeckofcards() {
         hand.addCard(new BJCard("Hearts", "Ace"));
         hand.addCard(new BJCard("Spades", "King"));
-        assertTrue(hand.isBlackJack());
+        assertTrue(hand.isBlackjack());
     }
 
     @Test

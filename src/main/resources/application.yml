@@ -1,12 +1,25 @@
 server:
   port: 8080
+  servlet:
+    context-path: /deckofcards
 
 spring:
   application:
-    name: blackjack
+    name: deckofcards
 
 # 日誌配置
 logging:
   level:
     root: INFO
     org.springframework.web: DEBUG
+
+# Swagger文檔配置
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+  api-docs:
+    path: /v3/api-docs
+    enabled: true
+  packages-to-scan: com.your.package  # 替換為您的包名
+  paths-to-match: /**
