@@ -68,4 +68,8 @@ public class BJHand {
         BJCard secondCard = cards.get(1);
         return firstCard.getValue() == secondCard.getValue();
     }
+
+    public List<BJCard> getCards() {
+        return cards;
+    }
 }

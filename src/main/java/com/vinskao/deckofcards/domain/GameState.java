@@ -62,4 +62,8 @@ public class GameState {
     public Integer getDealerScore() {
         return dealerScore;
     }
+
+    public BJHand getDealerHand() {
+        return dealerCards;
+    }
 } 
