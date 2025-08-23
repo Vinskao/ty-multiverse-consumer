@@ -1,8 +1,8 @@
 ```
 src/
 ├── main/
-│   ├── java/com/vinskao/deckofcards/
-│   │   ├── deckofcardsApplication.java
+│   ├── java/com/vinskao/ty_multiverse_consumer/
+│   │   ├── ty_multiverse_consumerApplication.java
 │   │   ├── model/
 │   │   │   ├── Card.java
 │   │   │   └── Deck.java
@@ -15,7 +15,7 @@ src/
 │       ├── static/
 │       └── templates/
 └── test/
-    ├── java/com/vinskao/deckofcards/
+    ├── java/com/vinskao/ty_multiverse_consumer/
     │   ├── model/
     │   │   ├── CardTest.java
     │   │   └── DeckTest.java
@@ -27,5 +27,5 @@ src/
 ```
 
 
-http://localhost:8080/deckofcards/swagger-ui.html
-http://localhost:8080/deckofcards/v3/api-docs
+http://localhost:8080/ty_multiverse_consumer/swagger-ui.html
+http://localhost:8080/ty_multiverse_consumer/v3/api-docs
