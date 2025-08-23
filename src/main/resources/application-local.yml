@@ -1,5 +1,5 @@
 server:
-  port: 8081
+  port: ${server.port:8081}
   servlet:
     context-path: /ty_multiverse_consumer
 
@@ -7,10 +7,10 @@ spring:
   application:
     name: ty_multiverse_consumer
   datasource:
-    url: jdbc:postgresql://peoplesystem-peoplesystem.j.aivencloud.com:26742/defaultdb?sslmode=require
-    driver-class-name: org.postgresql.Driver
-    username: avnadmin
-    password: AVNS_0P0_AO7Q_a2EhQ2KbVK
+    url: ${spring.datasource.url}
+    driver-class-name: ${spring.datasource.driver-class-name}
+    username: ${spring.datasource.username}
+    password: ${spring.datasource.password}
   jpa:
     hibernate:
       ddl-auto: none
