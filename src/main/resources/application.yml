@@ -1,37 +1,48 @@
 server:
-  port: 8081
+  port: @SERVER_PORT@
   servlet:
     context-path: /ty_multiverse_consumer
 
 spring:
   application:
     name: ty_multiverse_consumer
-  # 數據庫配置 - 使用默認 H2 配置
+  # 數據庫配置 - PostgreSQL
+  config:
+    import: classpath:env/@env@.properties
   datasource:
-    url: jdbc:h2:mem:testdb
-    driver-class-name: org.h2.Driver
-    username: sa
-    password: 
-    # HikariCP 連接池配置
+    driver-class-name: org.postgresql.Driver
+    url: '@SPRING_DATASOURCE_URL@'
+    username: '@SPRING_DATASOURCE_USERNAME@'
+    password: '@SPRING_DATASOURCE_PASSWORD@'
+    # HikariCP 連接池配置 - 最大2個連接
     hikari:
-      maximum-pool-size: 5
-      minimum-idle: 1
+      maximum-pool-size: 2
+      minimum-idle: 0
       connection-timeout: 30000
-      idle-timeout: 600000
-      max-lifetime: 1800000
-      leak-detection-threshold: 60000 
-  h2:
-    console:
-      enabled: true
-      path: /h2-console
+      idle-timeout: 30000
+      max-lifetime: 60000
+      leak-detection-threshold: 5000
+      connection-test-query: SELECT 1
+      validation-timeout: 5000
+      register-mbeans: true
+      pool-name: HikariPool-1
+      auto-commit: true 
   jpa:
     hibernate:
-      ddl-auto: create-drop
+      ddl-auto: none
     show-sql: true
+    open-in-view: false
     properties:
       hibernate:
         format_sql: true
-        dialect: org.hibernate.dialect.H2Dialect
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        hbm2ddl:
+          auto: none
+        connection:
+          release_mode: after_transaction
+        jdbc:
+          batch_size: 20
+          fetch_size: 20
   rabbitmq:
     enabled: ${RABBITMQ_ENABLED:true}
     host: ${RABBITMQ_HOST:localhost}
@@ -43,10 +54,10 @@ spring:
 # 日誌配置
 logging:
   level:
-    root: INFO
-    org.springframework.web: DEBUG
-    org.springframework.amqp: DEBUG
-    com.vinskao.ty_multiverse_consumer: DEBUG
+    root: @LOGGING_LEVEL@
+    org.springframework.web: @LOGGING_LEVEL_SPRINGFRAMEWORK@
+    org.springframework.amqp: @LOGGING_LEVEL_SPRINGFRAMEWORK@
+    com.vinskao.ty_multiverse_consumer: @LOGGING_LEVEL@
 
 # Actuator 配置
 management:

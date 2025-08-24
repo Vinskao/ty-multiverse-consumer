@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
@@ -35,6 +36,9 @@ public class WeaponConsumer {
     @Autowired
     private ObjectMapper objectMapper;
     
+    @Autowired
+    private RabbitTemplate rabbitTemplate;
+    
     /**
      * 處理獲取所有武器請求
      */
@@ -49,6 +53,9 @@ public class WeaponConsumer {
             
             logger.info("成功獲取所有武器: count={}, requestId={}", 
                        weapons.size(), message.getRequestId());
+            
+            // 發送回傳消息
+            sendResponse(message.getRequestId(), "success", "成功獲取所有武器", weapons);
             
         } catch (Exception e) {
             logger.error("處理獲取所有武器請求失敗: {}", e.getMessage(), e);
@@ -69,6 +76,9 @@ public class WeaponConsumer {
             weaponService.getWeaponById(name).ifPresent(weapon -> {
                 logger.info("成功獲取武器: name={}, requestId={}", 
                            weapon.getName(), message.getRequestId());
+                
+                // 發送回傳消息
+                sendResponse(message.getRequestId(), "success", "成功獲取武器", weapon);
             });
             
         } catch (Exception e) {
@@ -91,6 +101,9 @@ public class WeaponConsumer {
             
             logger.info("成功獲取擁有者武器: owner={}, count={}, requestId={}", 
                        owner, weapons.size(), message.getRequestId());
+            
+            // 發送回傳消息
+            sendResponse(message.getRequestId(), "success", "成功獲取擁有者武器", weapons);
             
         } catch (Exception e) {
             logger.error("處理根據擁有者獲取武器請求失敗: {}", e.getMessage(), e);
@@ -231,6 +244,65 @@ public class WeaponConsumer {
         } catch (Exception e) {
             logger.error("處理更新武器基礎傷害請求失敗: {}", e.getMessage(), e);
         }
+    }
+    
+    /**
+     * 發送回傳消息
+     */
+    private void sendResponse(String requestId, String status, String message, Object data) {
+        try {
+            WeaponResponseDTO response = new WeaponResponseDTO();
+            response.setRequestId(requestId);
+            response.setStatus(status);
+            response.setMessage(message);
+            response.setData(data);
+            response.setTimestamp(System.currentTimeMillis());
+            response.setErrorCode(null);
+            response.setErrorDetails(null);
+            
+            String responseJson = objectMapper.writeValueAsString(response);
+            rabbitTemplate.convertAndSend("weapon-response", "weapon.response", responseJson);
+            
+            logger.info("已發送回傳消息: requestId={}, status={}", requestId, status);
+        } catch (Exception e) {
+            logger.error("發送回傳消息失敗: {}", e.getMessage(), e);
+        }
+    }
+    
+    /**
+     * Weapon 回傳消息 DTO
+     * 與 Producer 端的 ProducerResponseDTO 保持一致
+     */
+    public static class WeaponResponseDTO {
+        private String requestId;
+        private String status;
+        private String message;
+        private Object data;
+        private Long timestamp;
+        private String errorCode;
+        private String errorDetails;
+        
+        // Getters and Setters
+        public String getRequestId() { return requestId; }
+        public void setRequestId(String requestId) { this.requestId = requestId; }
+        
+        public String getStatus() { return status; }
+        public void setStatus(String status) { this.status = status; }
+        
+        public String getMessage() { return message; }
+        public void setMessage(String message) { this.message = message; }
+        
+        public Object getData() { return data; }
+        public void setData(Object data) { this.data = data; }
+        
+        public Long getTimestamp() { return timestamp; }
+        public void setTimestamp(Long timestamp) { this.timestamp = timestamp; }
+        
+        public String getErrorCode() { return errorCode; }
+        public void setErrorCode(String errorCode) { this.errorCode = errorCode; }
+        
+        public String getErrorDetails() { return errorDetails; }
+        public void setErrorDetails(String errorDetails) { this.errorDetails = errorDetails; }
     }
     
     /**

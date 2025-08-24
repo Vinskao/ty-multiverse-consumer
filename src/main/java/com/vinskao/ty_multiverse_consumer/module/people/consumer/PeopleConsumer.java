@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
@@ -34,6 +35,9 @@ public class PeopleConsumer {
     @Autowired
     private ObjectMapper objectMapper;
     
+    @Autowired
+    private RabbitTemplate rabbitTemplate;
+    
     /**
      * 處理插入單個角色請求
      */
@@ -49,6 +53,9 @@ public class PeopleConsumer {
             
             logger.info("成功插入角色: name={}, requestId={}", 
                        savedPeople.getName(), message.getRequestId());
+            
+            // 發送回傳消息
+            sendResponse(message.getRequestId(), "success", "成功插入角色", savedPeople);
             
         } catch (Exception e) {
             logger.error("處理插入角色請求失敗: {}", e.getMessage(), e);
@@ -70,6 +77,9 @@ public class PeopleConsumer {
             
             logger.info("成功更新角色: name={}, requestId={}", 
                        updatedPeople.getName(), message.getRequestId());
+            
+            // 發送回傳消息
+            sendResponse(message.getRequestId(), "success", "成功更新角色", updatedPeople);
             
         } catch (Exception e) {
             logger.error("處理更新角色請求失敗: {}", e.getMessage(), e);
@@ -93,6 +103,9 @@ public class PeopleConsumer {
             logger.info("成功插入多個角色: count={}, requestId={}", 
                        savedPeople.size(), message.getRequestId());
             
+            // 發送回傳消息
+            sendResponse(message.getRequestId(), "success", "成功插入多個角色", savedPeople);
+            
         } catch (Exception e) {
             logger.error("處理插入多個角色請求失敗: {}", e.getMessage(), e);
         }
@@ -112,6 +125,9 @@ public class PeopleConsumer {
             
             logger.info("成功獲取所有角色: count={}, requestId={}", 
                        people.size(), message.getRequestId());
+            
+            // 發送回傳消息
+            sendResponse(message.getRequestId(), "success", "成功獲取所有角色", people);
             
         } catch (Exception e) {
             logger.error("處理獲取所有角色請求失敗: {}", e.getMessage(), e);
@@ -183,6 +199,65 @@ public class PeopleConsumer {
         } catch (Exception e) {
             logger.error("處理角色傷害計算請求失敗: {}", e.getMessage(), e);
         }
+    }
+    
+    /**
+     * 發送回傳消息
+     */
+    private void sendResponse(String requestId, String status, String message, Object data) {
+        try {
+            PeopleResponseDTO response = new PeopleResponseDTO();
+            response.setRequestId(requestId);
+            response.setStatus(status);
+            response.setMessage(message);
+            response.setData(data);
+            response.setTimestamp(System.currentTimeMillis());
+            response.setErrorCode(null);
+            response.setErrorDetails(null);
+            
+            String responseJson = objectMapper.writeValueAsString(response);
+            rabbitTemplate.convertAndSend("people-response", "people.response", responseJson);
+            
+            logger.info("已發送回傳消息: requestId={}, status={}", requestId, status);
+        } catch (Exception e) {
+            logger.error("發送回傳消息失敗: {}", e.getMessage(), e);
+        }
+    }
+    
+    /**
+     * People 回傳消息 DTO
+     * 與 Producer 端的 ProducerResponseDTO 保持一致
+     */
+    public static class PeopleResponseDTO {
+        private String requestId;
+        private String status;
+        private String message;
+        private Object data;
+        private Long timestamp;
+        private String errorCode;
+        private String errorDetails;
+        
+        // Getters and Setters
+        public String getRequestId() { return requestId; }
+        public void setRequestId(String requestId) { this.requestId = requestId; }
+        
+        public String getStatus() { return status; }
+        public void setStatus(String status) { this.status = status; }
+        
+        public String getMessage() { return message; }
+        public void setMessage(String message) { this.message = message; }
+        
+        public Object getData() { return data; }
+        public void setData(Object data) { this.data = data; }
+        
+        public Long getTimestamp() { return timestamp; }
+        public void setTimestamp(Long timestamp) { this.timestamp = timestamp; }
+        
+        public String getErrorCode() { return errorCode; }
+        public void setErrorCode(String errorCode) { this.errorCode = errorCode; }
+        
+        public String getErrorDetails() { return errorDetails; }
+        public void setErrorDetails(String errorDetails) { this.errorDetails = errorDetails; }
     }
     
     /**

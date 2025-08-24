@@ -1,0 +1,84 @@
+{
+  "gameStates": {
+    "GAME_START": {
+      "description": "遊戲開始狀態",
+      "nextStates": ["BETTING", "GAME_END"]
+    },
+    "BETTING": {
+      "description": "玩家下注階段", 
+      "nextStates": ["DEAL_INITIAL_CARDS", "GAME_END"]
+    },
+    "DEAL_INITIAL_CARDS": {
+      "description": "發放初始牌階段",
+      "nextStates": ["PLAYER_TURN", "CHECK_BLACKJACK", "GAME_END"]
+    },
+    "CHECK_BLACKJACK": {
+      "description": "檢查是否有人獲得21點",
+      "nextStates": ["PLAYER_TURN", "DEALER_TURN", "GAME_RESULT", "GAME_END"]
+    },
+    "PLAYER_TURN": {
+      "description": "玩家回合",
+      "nextStates": ["PLAYER_HIT", "PLAYER_STAND", "PLAYER_DOUBLE", "PLAYER_SPLIT", "DEALER_TURN", "GAME_END"]
+    },
+    "PLAYER_HIT": {
+      "description": "玩家要牌",
+      "nextStates": ["PLAYER_TURN", "PLAYER_BUST", "DEALER_TURN", "GAME_END"]
+    },
+    "PLAYER_STAND": {
+      "description": "玩家停牌",
+      "nextStates": ["DEALER_TURN", "GAME_END"]
+    },
+    "PLAYER_DOUBLE": {
+      "description": "玩家加倍下注",
+      "nextStates": ["DEALER_TURN", "PLAYER_BUST", "GAME_END"]
+    },
+    "PLAYER_SPLIT": {
+      "description": "玩家分牌",
+      "nextStates": ["PLAYER_TURN", "GAME_END"]
+    },
+    "PLAYER_BUST": {
+      "description": "玩家爆牌",
+      "nextStates": ["GAME_RESULT", "GAME_END"]
+    },
+    "DEALER_TURN": {
+      "description": "莊家回合",
+      "nextStates": ["DEALER_HIT", "DEALER_STAND", "DEALER_BUST", "GAME_END"]
+    },
+    "DEALER_HIT": {
+      "description": "莊家要牌",
+      "nextStates": ["DEALER_TURN", "DEALER_BUST", "GAME_END"]
+    },
+    "DEALER_STAND": {
+      "description": "莊家停牌",
+      "nextStates": ["GAME_RESULT", "GAME_END"]
+    },
+    "DEALER_BUST": {
+      "description": "莊家爆牌",
+      "nextStates": ["GAME_RESULT", "GAME_END"]
+    },
+    "GAME_RESULT": {
+      "description": "計算遊戲結果",
+      "nextStates": ["PLAYER_WIN", "DEALER_WIN", "PUSH", "GAME_END"]
+    },
+    "PLAYER_WIN": {
+      "description": "玩家獲勝",
+      "nextStates": ["GAME_RESULT"]
+    },
+    "DEALER_WIN": {
+      "description": "莊家獲勝",
+      "nextStates": ["GAME_RESULT"]
+    },
+    "PUSH": {
+      "description": "平手",
+      "nextStates": ["GAME_RESULT"]
+    },
+    "PAYOUT": {
+      "description": "派發獎金階段",
+      "nextStates": ["GAME_END", "BETTING"]
+    },
+    "GAME_END": {
+      "description": "遊戲結束",
+      "nextStates": ["GAME_START"]
+    }
+  }
+}

@@ -4,10 +4,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
-import com.vinskao.ty_multiverse_consumer.core.service.AsyncMessageService;
+import com.vinskao.ty_multiverse_consumer.service.DatabaseConnectionService;
 
 /**
  * 通用 Consumer
@@ -30,6 +31,12 @@ public class CommonConsumer {
     
     @Autowired
     private com.vinskao.ty_multiverse_consumer.module.people.service.PeopleService peopleService;
+    
+    @Autowired
+    private RabbitTemplate rabbitTemplate;
+    
+    @Autowired
+    private DatabaseConnectionService databaseConnectionService;
     
     /**
      * 處理傷害計算請求
@@ -71,6 +78,13 @@ public class CommonConsumer {
             
             logger.info("開始獲取所有角色: requestId={}", message.getRequestId());
             
+            // 等待數據庫連接可用
+            logger.info("等待數據庫連接可用...");
+            if (!databaseConnectionService.isConnectionAvailable()) {
+                logger.info("數據庫連接不可用，開始等待...");
+                databaseConnectionService.forceWaitForConnection();
+            }
+            
             // 實際調用 People 服務獲取所有角色
             var peopleList = peopleService.getAllPeopleOptimized();
             
@@ -88,6 +102,22 @@ public class CommonConsumer {
                                people.getJob(), people.getAttributes());
                 });
             }
+            
+            // 構建回傳消息
+            PeopleGetAllResponseDTO response = new PeopleGetAllResponseDTO();
+            response.setRequestId(message.getRequestId());
+            response.setStatus("success");
+            response.setMessage("成功獲取所有角色數據");
+            response.setData(peopleList);
+            response.setTimestamp(System.currentTimeMillis());
+            response.setErrorCode(null);
+            response.setErrorDetails(null);
+            
+            // 發送回傳消息到 producer
+            String responseJson = objectMapper.writeValueAsString(response);
+            rabbitTemplate.convertAndSend("people-response", "people.get-all.response", responseJson);
+            
+            logger.info("已發送回傳消息: requestId={}, dataSize={}", message.getRequestId(), peopleList.size());
             
         } catch (Exception e) {
             logger.error("處理獲取所有角色請求失敗: {}", e.getMessage(), e);
@@ -123,4 +153,40 @@ public class CommonConsumer {
         public String getOperation() { return operation; }
         public void setOperation(String operation) { this.operation = operation; }
     }
+    
+             /**
+          * 獲取所有角色回傳消息 DTO
+          * 與 Producer 端的 ProducerResponseDTO 保持一致
+          */
+         public static class PeopleGetAllResponseDTO {
+             private String requestId;
+             private String status;
+             private String message;
+             private Object data;
+             private Long timestamp;
+             private String errorCode;
+             private String errorDetails;
+             
+             // Getters and Setters
+             public String getRequestId() { return requestId; }
+             public void setRequestId(String requestId) { this.requestId = requestId; }
+             
+             public String getStatus() { return status; }
+             public void setStatus(String status) { this.status = status; }
+             
+             public String getMessage() { return message; }
+             public void setMessage(String message) { this.message = message; }
+             
+             public Object getData() { return data; }
+             public void setData(Object data) { this.data = data; }
+             
+             public Long getTimestamp() { return timestamp; }
+             public void setTimestamp(Long timestamp) { this.timestamp = timestamp; }
+             
+             public String getErrorCode() { return errorCode; }
+             public void setErrorCode(String errorCode) { this.errorCode = errorCode; }
+             
+             public String getErrorDetails() { return errorDetails; }
+             public void setErrorDetails(String errorDetails) { this.errorDetails = errorDetails; }
+         }
 }

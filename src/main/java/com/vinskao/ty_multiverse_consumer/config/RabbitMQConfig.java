@@ -34,6 +34,8 @@ public class RabbitMQConfig {
     // 交換機名稱
     public static final String PEOPLE_EXCHANGE = "people.exchange";
     public static final String WEAPON_EXCHANGE = "weapon.exchange";
+    public static final String PEOPLE_RESPONSE_EXCHANGE = "people-response";
+    public static final String WEAPON_RESPONSE_EXCHANGE = "weapon-response";
 
     // 路由鍵
     public static final String PEOPLE_INSERT_ROUTING_KEY = "people.insert";
@@ -53,6 +55,15 @@ public class RabbitMQConfig {
     public static final String WEAPON_EXISTS_ROUTING_KEY = "weapon.exists";
     public static final String WEAPON_UPDATE_ATTRIBUTES_ROUTING_KEY = "weapon.update.attributes";
     public static final String WEAPON_UPDATE_BASE_DAMAGE_ROUTING_KEY = "weapon.update.base.damage";
+    
+    // 回傳路由鍵
+    public static final String PEOPLE_GET_ALL_RESPONSE_ROUTING_KEY = "people.get-all.response";
+    public static final String PEOPLE_RESPONSE_ROUTING_KEY = "people.response";
+    public static final String WEAPON_RESPONSE_ROUTING_KEY = "weapon.response";
+    
+    // 回傳隊列名稱
+    public static final String PEOPLE_RESPONSE_QUEUE = "people.response.queue";
+    public static final String WEAPON_RESPONSE_QUEUE = "weapon.response.queue";
 
     // 創建隊列
     @Bean
@@ -89,6 +100,17 @@ public class RabbitMQConfig {
     @Bean
     public Queue peopleDamageCalculationQueue() {
         return new Queue(PEOPLE_DAMAGE_CALCULATION_QUEUE, true);
+    }
+    
+    // 回傳隊列
+    @Bean
+    public Queue peopleResponseQueue() {
+        return new Queue(PEOPLE_RESPONSE_QUEUE, true);
+    }
+    
+    @Bean
+    public Queue weaponResponseQueue() {
+        return new Queue(WEAPON_RESPONSE_QUEUE, true);
     }
 
     // Weapon 隊列
@@ -147,6 +169,16 @@ public class RabbitMQConfig {
     public DirectExchange weaponExchange() {
         return new DirectExchange(WEAPON_EXCHANGE);
     }
+    
+    @Bean
+    public DirectExchange peopleResponseExchange() {
+        return new DirectExchange(PEOPLE_RESPONSE_EXCHANGE);
+    }
+    
+    @Bean
+    public DirectExchange weaponResponseExchange() {
+        return new DirectExchange(WEAPON_RESPONSE_EXCHANGE);
+    }
 
     // 綁定 People 隊列到交換機
     @Bean
@@ -196,6 +228,28 @@ public class RabbitMQConfig {
         return BindingBuilder.bind(peopleDamageCalculationQueue())
                 .to(peopleExchange())
                 .with(PEOPLE_DAMAGE_CALCULATION_ROUTING_KEY);
+    }
+    
+    // 綁定回傳隊列到回傳交換機
+    @Bean
+    public Binding peopleResponseBinding() {
+        return BindingBuilder.bind(peopleResponseQueue())
+                .to(peopleResponseExchange())
+                .with(PEOPLE_GET_ALL_RESPONSE_ROUTING_KEY);
+    }
+    
+    @Bean
+    public Binding peopleResponseBinding2() {
+        return BindingBuilder.bind(peopleResponseQueue())
+                .to(peopleResponseExchange())
+                .with(PEOPLE_RESPONSE_ROUTING_KEY);
+    }
+    
+    @Bean
+    public Binding weaponResponseBinding() {
+        return BindingBuilder.bind(weaponResponseQueue())
+                .to(weaponResponseExchange())
+                .with(WEAPON_RESPONSE_ROUTING_KEY);
     }
 
     // 綁定 Weapon 隊列到交換機

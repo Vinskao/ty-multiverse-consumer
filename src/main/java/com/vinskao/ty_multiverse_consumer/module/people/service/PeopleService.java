@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.data.domain.Sort;
+import org.springframework.retry.annotation.Retryable;
 
 import com.vinskao.ty_multiverse_consumer.module.people.dao.PeopleRepository;
 import com.vinskao.ty_multiverse_consumer.module.people.domain.vo.People;
@@ -59,10 +60,21 @@ public class PeopleService {
      * 
      * @return 所有角色列表
      */
+    @Transactional(readOnly = true)
+    @Retryable(value = {
+        org.springframework.transaction.CannotCreateTransactionException.class,
+        org.hibernate.exception.JDBCConnectionException.class,
+        java.sql.SQLTransientConnectionException.class
+    }, maxAttempts = 10)
     public List<People> getAllPeopleOptimized() {
-        // 使用現有的findAll方法，但可以在此處添加額外的優化邏輯
-        // 例如：預加載關聯數據、使用特定的查詢策略等
-        return findAll();
+        try {
+            // 使用現有的findAll方法，但可以在此處添加額外的優化邏輯
+            // 例如：預加載關聯數據、使用特定的查詢策略等
+            return findAll();
+        } catch (Exception e) {
+            // 記錄錯誤並重新拋出
+            throw new RuntimeException("獲取所有角色失敗", e);
+        }
     }
 
     /**
