@@ -15,10 +15,10 @@ pipeline {
                     tty: true
                     resources:
                       requests:
-                        cpu: "50m"
+                        cpu: "15m"
                         memory: "1024Mi"
                       limits:
-                        cpu: "15m"
+                        cpu: "50m"
                         memory: "2048Mi"
                     volumeMounts:
                     - mountPath: /root/.m2
@@ -33,10 +33,10 @@ pipeline {
                       privileged: true
                     resources:
                       requests:
-                        cpu: "25m"
+                        cpu: "15m"
                         memory: "512Mi"
                       limits:
-                        cpu: "10m"
+                        cpu: "50m"
                         memory: "1024Mi"
                     env:
                     - name: DOCKER_TLS_CERTDIR
@@ -55,10 +55,10 @@ pipeline {
                       runAsUser: 0
                     resources:
                       requests:
-                        cpu: "10m"
+                        cpu: "15m"
                         memory: "256Mi"
                       limits:
-                        cpu: "5m"
+                        cpu: "25m"
                         memory: "512Mi"
                     volumeMounts:
                     - mountPath: /home/jenkins/agent
