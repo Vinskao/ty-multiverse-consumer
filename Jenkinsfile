@@ -213,6 +213,20 @@ pipeline {
                                     exit 1
                                 fi
                                 
+                                # 檢查 target 目錄和 JAR 檔案
+                                echo "=== Checking target directory ==="
+                                ls -la target/ || echo "Target directory not found"
+                                echo "=== Looking for JAR files ==="
+                                find target/ -name "*.jar" -type f 2>/dev/null || echo "No JAR files found in target"
+                                
+                                # 確認 JAR 檔案存在
+                                if [ ! -f "target/ty-multiverse-consumer.jar" ]; then
+                                    echo "Error: JAR file not found at target/ty-multiverse-consumer.jar"
+                                    echo "Available files in target:"
+                                    ls -la target/ || echo "Target directory does not exist"
+                                    exit 1
+                                fi
+                                
                                 # 構建 Docker 鏡像（啟用 BuildKit 與多平台參數）
                                 echo "Building Docker image..."
                                 docker build \
