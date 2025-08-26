@@ -27,5 +27,5 @@ src/
 ```
 
 
-http://localhost:8080/ty_multiverse_consumer/swagger-ui.html
-http://localhost:8080/ty_multiverse_consumer/v3/api-docs
+http://localhost:8081/ty_multiverse_consumer/swagger-ui.html
+http://localhost:8081/ty_multiverse_consumer/v3/api-docs
