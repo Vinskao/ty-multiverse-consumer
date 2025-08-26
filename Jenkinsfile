@@ -15,11 +15,11 @@ pipeline {
                     tty: true
                     resources:
                       requests:
-                        cpu: "15m"
-                        memory: "1024Mi"
-                      limits:
-                        cpu: "50m"
+                        cpu: "500m"
                         memory: "2048Mi"
+                      limits:
+                        cpu: "2000m"
+                        memory: "4096Mi"
                     volumeMounts:
                     - mountPath: /root/.m2
                       name: maven-repo
@@ -33,11 +33,11 @@ pipeline {
                       privileged: true
                     resources:
                       requests:
-                        cpu: "15m"
-                        memory: "512Mi"
-                      limits:
-                        cpu: "50m"
+                        cpu: "200m"
                         memory: "1024Mi"
+                      limits:
+                        cpu: "1000m"
+                        memory: "2048Mi"
                     env:
                     - name: DOCKER_TLS_CERTDIR
                       value: ""
@@ -167,7 +167,19 @@ pipeline {
         stage('Build') {
             steps {
                 container('maven') {
-                    sh 'MAVEN_OPTS="-Xmx1024m -XX:+UseG1GC" mvn -T 1C -Dmaven.javadoc.skip=true clean package -P platform -DskipTests'
+                    sh '''
+                        # 設置 Maven 優化選項
+                        export MAVEN_OPTS="-Xmx2048m -XX:+UseG1GC -XX:+UseStringDeduplication"
+                        
+                        # 使用並行構建和跳過不必要的步驟
+                        mvn -T 2C \
+                            -Dmaven.javadoc.skip=true \
+                            -Dmaven.source.skip=true \
+                            -Dmaven.test.skip=true \
+                            -Dmaven.install.skip=true \
+                            -Dmaven.deploy.skip=true \
+                            clean package -P platform
+                    '''
                 }
             }
         }
@@ -175,7 +187,18 @@ pipeline {
         stage('Test') {
             steps {
                 container('maven') {
-                    sh 'MAVEN_OPTS="-Xmx1024m -XX:+UseG1GC" mvn -T 1C -Dmaven.javadoc.skip=true test -P platform'
+                    sh '''
+                        # 設置 Maven 優化選項
+                        export MAVEN_OPTS="-Xmx2048m -XX:+UseG1GC -XX:+UseStringDeduplication"
+                        
+                        # 只運行測試，跳過其他步驟
+                        mvn -T 2C \
+                            -Dmaven.javadoc.skip=true \
+                            -Dmaven.source.skip=true \
+                            -Dmaven.install.skip=true \
+                            -Dmaven.deploy.skip=true \
+                            test -P platform
+                    '''
                 }
             }
         }
@@ -232,6 +255,8 @@ pipeline {
                                 docker build \
                                     --build-arg BUILDKIT_INLINE_CACHE=1 \
                                     --cache-from ${DOCKER_IMAGE}:latest \
+                                    --build-arg MAVEN_OPTS="-Xmx2048m -XX:+UseG1GC" \
+                                    --build-arg MAVEN_ARGS="-T 2C -Dmaven.javadoc.skip=true -Dmaven.source.skip=true -Dmaven.test.skip=true" \
                                     -t ${DOCKER_IMAGE}:${DOCKER_TAG} \
                                     -t ${DOCKER_IMAGE}:latest \
                                     .
