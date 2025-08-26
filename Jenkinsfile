@@ -33,19 +33,35 @@ pipeline {
                       privileged: true
                     resources:
                       requests:
-                        cpu: "15m"
-                        memory: "512Mi"
-                      limits:
-                        cpu: "20m"
+                        cpu: "100m"
                         memory: "1Gi"
+                      limits:
+                        cpu: "500m"
+                        memory: "2Gi"
                     env:
                     - name: DOCKER_TLS_CERTDIR
                       value: ""
                     - name: DOCKER_BUILDKIT
                       value: "1"
+                    - name: DOCKER_HOST
+                      value: "tcp://localhost:2375"
+                    - name: DOCKER_DRIVER
+                      value: "overlay2"
+                    - name: DOCKER_STORAGE_DRIVER
+                      value: "overlay2"
                     volumeMounts:
                     - mountPath: /home/jenkins/agent
                       name: workspace-volume
+                    startupProbe:
+                      exec:
+                        command:
+                        - sh
+                        - -c
+                        - "docker info > /dev/null 2>&1"
+                      initialDelaySeconds: 30
+                      periodSeconds: 10
+                      timeoutSeconds: 5
+                      failureThreshold: 30
                   - name: kubectl
                     image: bitnami/kubectl:1.30.7
                     command: ["/bin/sh"]
@@ -207,6 +223,15 @@ pipeline {
             steps {
                 container('docker') {
                     script {
+                        // 等待 Docker 完全啟動
+                        sh '''
+                            echo "Waiting for Docker to be ready..."
+                            timeout 120 bash -c 'until docker info > /dev/null 2>&1; do
+                                echo "Docker not ready yet, waiting..."
+                                sleep 5
+                            done'
+                            echo "Docker is ready!"
+                        '''
                         withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'DOCKER_USERNAME', passwordVariable: 'DOCKER_PASSWORD')]) {
                             sh '''
                                 cd "${WORKSPACE}"
