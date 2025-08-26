@@ -15,11 +15,11 @@ pipeline {
                     tty: true
                     resources:
                       requests:
-                        cpu: "15m"
+                        cpu: "100m"
                         memory: "1024Mi"
                       limits:
-                        cpu: "20m"
-                        memory: "1Gi"
+                        cpu: "500m"
+                        memory: "2048Mi"
                     volumeMounts:
                     - mountPath: /root/.m2
                       name: maven-repo
@@ -33,35 +33,19 @@ pipeline {
                       privileged: true
                     resources:
                       requests:
-                        cpu: "100m"
-                        memory: "1Gi"
+                        cpu: "50m"
+                        memory: "512Mi"
                       limits:
-                        cpu: "500m"
-                        memory: "2Gi"
+                        cpu: "200m"
+                        memory: "1024Mi"
                     env:
                     - name: DOCKER_TLS_CERTDIR
                       value: ""
                     - name: DOCKER_BUILDKIT
                       value: "1"
-                    - name: DOCKER_HOST
-                      value: "tcp://localhost:2375"
-                    - name: DOCKER_DRIVER
-                      value: "overlay2"
-                    - name: DOCKER_STORAGE_DRIVER
-                      value: "overlay2"
                     volumeMounts:
                     - mountPath: /home/jenkins/agent
                       name: workspace-volume
-                    startupProbe:
-                      exec:
-                        command:
-                        - sh
-                        - -c
-                        - "docker info > /dev/null 2>&1"
-                      initialDelaySeconds: 30
-                      periodSeconds: 10
-                      timeoutSeconds: 5
-                      failureThreshold: 30
                   - name: kubectl
                     image: bitnami/kubectl:1.30.7
                     command: ["/bin/sh"]
@@ -71,11 +55,11 @@ pipeline {
                       runAsUser: 0
                     resources:
                       requests:
-                        cpu: "15m"
+                        cpu: "25m"
                         memory: "256Mi"
                       limits:
-                        cpu: "20m"
-                        memory: "1Gi"
+                        cpu: "100m"
+                        memory: "512Mi"
                     volumeMounts:
                     - mountPath: /home/jenkins/agent
                       name: workspace-volume
@@ -183,19 +167,7 @@ pipeline {
         stage('Build') {
             steps {
                 container('maven') {
-                    sh '''
-                        # 設置 Maven 優化選項
-                        export MAVEN_OPTS="-Xmx2048m -XX:+UseG1GC -XX:+UseStringDeduplication"
-                        
-                        # 使用並行構建和跳過不必要的步驟
-                        mvn -T 2C \
-                            -Dmaven.javadoc.skip=true \
-                            -Dmaven.source.skip=true \
-                            -Dmaven.test.skip=true \
-                            -Dmaven.install.skip=true \
-                            -Dmaven.deploy.skip=true \
-                            clean package -P platform
-                    '''
+                    sh 'MAVEN_OPTS="-Xmx1024m -XX:+UseG1GC" mvn -T 1C -Dmaven.javadoc.skip=true clean package -P platform -DskipTests'
                 }
             }
         }
@@ -203,18 +175,7 @@ pipeline {
         stage('Test') {
             steps {
                 container('maven') {
-                    sh '''
-                        # 設置 Maven 優化選項
-                        export MAVEN_OPTS="-Xmx2048m -XX:+UseG1GC -XX:+UseStringDeduplication"
-                        
-                        # 只運行測試，跳過其他步驟
-                        mvn -T 2C \
-                            -Dmaven.javadoc.skip=true \
-                            -Dmaven.source.skip=true \
-                            -Dmaven.install.skip=true \
-                            -Dmaven.deploy.skip=true \
-                            test -P platform
-                    '''
+                    sh 'MAVEN_OPTS="-Xmx1024m -XX:+UseG1GC" mvn -T 1C -Dmaven.javadoc.skip=true test -P platform'
                 }
             }
         }
@@ -223,15 +184,6 @@ pipeline {
             steps {
                 container('docker') {
                     script {
-                        // 等待 Docker 完全啟動
-                        sh '''
-                            echo "Waiting for Docker to be ready..."
-                            timeout 120 bash -c 'until docker info > /dev/null 2>&1; do
-                                echo "Docker not ready yet, waiting..."
-                                sleep 5
-                            done'
-                            echo "Docker is ready!"
-                        '''
                         withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'DOCKER_USERNAME', passwordVariable: 'DOCKER_PASSWORD')]) {
                             sh '''
                                 cd "${WORKSPACE}"
@@ -261,27 +213,11 @@ pipeline {
                                     exit 1
                                 fi
                                 
-                                # 檢查 target 目錄和 JAR 檔案
-                                echo "=== Checking target directory ==="
-                                ls -la target/ || echo "Target directory not found"
-                                echo "=== Looking for JAR files ==="
-                                find target/ -name "*.jar" -type f 2>/dev/null || echo "No JAR files found in target"
-                                
-                                # 確認 JAR 檔案存在
-                                if [ ! -f "target/ty-multiverse-consumer.jar" ]; then
-                                    echo "Error: JAR file not found at target/ty-multiverse-consumer.jar"
-                                    echo "Available files in target:"
-                                    ls -la target/ || echo "Target directory does not exist"
-                                    exit 1
-                                fi
-                                
                                 # 構建 Docker 鏡像（啟用 BuildKit 與多平台參數）
                                 echo "Building Docker image..."
                                 docker build \
                                     --build-arg BUILDKIT_INLINE_CACHE=1 \
                                     --cache-from ${DOCKER_IMAGE}:latest \
-                                    --build-arg MAVEN_OPTS="-Xmx2048m -XX:+UseG1GC" \
-                                    --build-arg MAVEN_ARGS="-T 2C -Dmaven.javadoc.skip=true -Dmaven.source.skip=true -Dmaven.test.skip=true" \
                                     -t ${DOCKER_IMAGE}:${DOCKER_TAG} \
                                     -t ${DOCKER_IMAGE}:latest \
                                     .
@@ -321,6 +257,17 @@ pipeline {
                                 done
                             '''
                         }
+                    }
+                }
+            }
+        }
+
+        stage('Debug Environment') {
+            steps {
+                container('kubectl') {
+                    script {
+                        echo "=== Listing all environment variables ==="
+                        sh 'printenv | sort'
                     }
                 }
             }
