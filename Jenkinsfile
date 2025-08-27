@@ -103,9 +103,9 @@ pipeline {
                             string(credentialsId: 'SPRING_DATASOURCE_URL', variable: 'SPRING_DATASOURCE_URL'),
                             string(credentialsId: 'SPRING_DATASOURCE_USERNAME', variable: 'SPRING_DATASOURCE_USERNAME'),
                             string(credentialsId: 'SPRING_DATASOURCE_PASSWORD', variable: 'SPRING_DATASOURCE_PASSWORD'),
-                            string(credentialsId: 'SPRING_PEOPLE_DATASOURCE_URL', variable: 'SPRING_PEOPLE_DATASOURCE_URL'),
-                            string(credentialsId: 'SPRING_PEOPLE_DATASOURCE_USERNAME', variable: 'SPRING_PEOPLE_DATASOURCE_USERNAME'),
-                            string(credentialsId: 'SPRING_PEOPLE_DATASOURCE_PASSWORD', variable: 'SPRING_PEOPLE_DATASOURCE_PASSWORD'),
+                            string(credentialsId: 'SPRING_DATASOURCE_URL', variable: 'SPRING_DATASOURCE_URL'),
+                            string(credentialsId: 'SPRING_DATASOURCE_USERNAME', variable: 'SPRING_DATASOURCE_USERNAME'),
+                            string(credentialsId: 'SPRING_DATASOURCE_PASSWORD', variable: 'SPRING_DATASOURCE_PASSWORD'),
                             string(credentialsId: 'REDIS_HOST', variable: 'REDIS_HOST'),
                             string(credentialsId: 'REDIS_CUSTOM_PORT', variable: 'REDIS_CUSTOM_PORT'),
                             string(credentialsId: 'REDIS_PASSWORD', variable: 'REDIS_PASSWORD'),
@@ -127,13 +127,13 @@ pipeline {
                                 SPRING_DATASOURCE_USERNAME=${SPRING_DATASOURCE_USERNAME}
                                 SPRING_DATASOURCE_PASSWORD=${SPRING_DATASOURCE_PASSWORD}
                                 # People datasource configuration
-                                SPRING_PEOPLE_DATASOURCE_URL=${SPRING_PEOPLE_DATASOURCE_URL}
-                                SPRING_PEOPLE_DATASOURCE_USERNAME=${SPRING_PEOPLE_DATASOURCE_USERNAME}
-                                SPRING_PEOPLE_DATASOURCE_PASSWORD=${SPRING_PEOPLE_DATASOURCE_PASSWORD}
+                                SPRING_DATASOURCE_URL=${SPRING_DATASOURCE_URL}
+                                SPRING_DATASOURCE_USERNAME=${SPRING_DATASOURCE_USERNAME}
+                                SPRING_DATASOURCE_PASSWORD=${SPRING_DATASOURCE_PASSWORD}
                                 # People datasource tokens for resource filtering
-                                PEOPLE_DATASOURCE_URL=${SPRING_PEOPLE_DATASOURCE_URL}
-                                PEOPLE_DATASOURCE_USERNAME=${SPRING_PEOPLE_DATASOURCE_USERNAME}
-                                PEOPLE_DATASOURCE_PASSWORD=${SPRING_PEOPLE_DATASOURCE_PASSWORD}
+                                PEOPLE_DATASOURCE_URL=${SPRING_DATASOURCE_URL}
+                                PEOPLE_DATASOURCE_USERNAME=${SPRING_DATASOURCE_USERNAME}
+                                PEOPLE_DATASOURCE_PASSWORD=${SPRING_DATASOURCE_PASSWORD}
                                 server.port=8081
                                 logging.level.root=INFO
                                 logging.level.org.springframework=INFO
@@ -148,7 +148,7 @@ pipeline {
                                 REDIS_PASSWORD=${REDIS_PASSWORD}
                                 REDIS_QUEUE_TYMB=${REDIS_QUEUE_TYMB}
                                 # 明确禁用people-datasource
-                                SPRING_PEOPLE_DATASOURCE_ENABLED=false
+                                SPRING_DATASOURCE_ENABLED=false
                                 # RabbitMQ 配置 - Production 環境啟用
                                 RABBITMQ_ENABLED=true
                                 RABBITMQ_HOST=rabbitmq-service
@@ -280,9 +280,9 @@ pipeline {
                         string(credentialsId: 'SPRING_DATASOURCE_URL', variable: 'SPRING_DATASOURCE_URL'),
                         string(credentialsId: 'SPRING_DATASOURCE_USERNAME', variable: 'SPRING_DATASOURCE_USERNAME'),
                         string(credentialsId: 'SPRING_DATASOURCE_PASSWORD', variable: 'SPRING_DATASOURCE_PASSWORD'),
-                        string(credentialsId: 'SPRING_PEOPLE_DATASOURCE_URL', variable: 'SPRING_PEOPLE_DATASOURCE_URL'),
-                        string(credentialsId: 'SPRING_PEOPLE_DATASOURCE_USERNAME', variable: 'SPRING_PEOPLE_DATASOURCE_USERNAME'),
-                        string(credentialsId: 'SPRING_PEOPLE_DATASOURCE_PASSWORD', variable: 'SPRING_PEOPLE_DATASOURCE_PASSWORD'),
+                        string(credentialsId: 'SPRING_DATASOURCE_URL', variable: 'SPRING_DATASOURCE_URL'),
+                        string(credentialsId: 'SPRING_DATASOURCE_USERNAME', variable: 'SPRING_DATASOURCE_USERNAME'),
+                        string(credentialsId: 'SPRING_DATASOURCE_PASSWORD', variable: 'SPRING_DATASOURCE_PASSWORD'),
                         string(credentialsId: 'REDIS_HOST', variable: 'REDIS_HOST'),
                         string(credentialsId: 'REDIS_CUSTOM_PORT', variable: 'REDIS_CUSTOM_PORT'),
                         string(credentialsId: 'REDIS_PASSWORD', variable: 'REDIS_PASSWORD'),
@@ -324,7 +324,7 @@ pipeline {
                                         echo "Recreating deployment ..."
                                         echo "=== Effective sensitive env values ==="
                                         echo "SPRING_DATASOURCE_URL=${SPRING_DATASOURCE_URL}"
-                                        echo "SPRING_PEOPLE_DATASOURCE_URL=${SPRING_PEOPLE_DATASOURCE_URL}"
+                                        echo "SPRING_DATASOURCE_URL=${SPRING_DATASOURCE_URL}"
                                         echo "KEYCLOAK_AUTH_SERVER_URL=${KEYCLOAK_AUTH_SERVER_URL}"
                                         echo "REDIS_HOST=${REDIS_HOST}:${REDIS_CUSTOM_PORT}"
 

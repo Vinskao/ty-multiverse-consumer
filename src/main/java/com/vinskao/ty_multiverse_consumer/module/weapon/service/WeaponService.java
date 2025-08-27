@@ -206,7 +206,7 @@ public class WeaponService {
      */
     @Transactional
     @SuppressWarnings("null")
-    public Weapon updateWeaponBonusAttributes(String name, String bonusAttributes) {
+    public Weapon updateWeaponBonusAttributes(String name, List<String> bonusAttributes) {
         return weaponRepository.findById(name)
             .map(existing -> {
                 existing.setBonusAttributes(bonusAttributes);
@@ -220,7 +220,7 @@ public class WeaponService {
      */
     @Transactional
     @SuppressWarnings("null")
-    public Weapon updateWeaponStateAttributes(String name, String stateAttributes) {
+    public Weapon updateWeaponStateAttributes(String name, List<String> stateAttributes) {
         return weaponRepository.findById(name)
             .map(existing -> {
                 existing.setStateAttributes(stateAttributes);

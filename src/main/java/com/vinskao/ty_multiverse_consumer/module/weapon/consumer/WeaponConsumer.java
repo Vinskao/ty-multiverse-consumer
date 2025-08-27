@@ -13,6 +13,8 @@ import com.vinskao.ty_multiverse_consumer.module.weapon.domain.vo.Weapon;
 
 import java.util.List;
 import java.util.Map;
+import java.util.ArrayList;
+import java.io.IOException;
 
 /**
  * Weapon 模組 Consumer
@@ -128,6 +130,69 @@ public class WeaponConsumer {
             
         } catch (Exception e) {
             logger.error("處理保存武器請求失敗: {}", e.getMessage(), e);
+        }
+    }
+    
+    /**
+     * 處理批量插入武器請求
+     */
+    @RabbitListener(queues = "weapon-insert-multiple")
+    public void handleInsertMultipleWeapons(String messageJson) {
+        try {
+            logger.info("收到批量插入武器請求: {}", messageJson);
+            
+            WeaponMessageDTO message = objectMapper.readValue(messageJson, WeaponMessageDTO.class);
+            
+            // 正確地將 data 轉換為 List<Weapon>
+            List<Weapon> weaponList;
+            if (message.getData() instanceof List) {
+                // 如果 data 已經是 List，需要將每個元素轉換為 Weapon 對象
+                @SuppressWarnings("unchecked")
+                List<Object> dataList = (List<Object>) message.getData();
+                weaponList = new ArrayList<>();
+                for (Object item : dataList) {
+                    if (item instanceof Weapon) {
+                        weaponList.add((Weapon) item);
+                    } else {
+                        // 將 LinkedHashMap 轉換為 Weapon 對象
+                        // 先處理數組類型的字段，將其轉換為 JSON 字符串
+                        if (item instanceof Map) {
+                            @SuppressWarnings("unchecked")
+                            Map<String, Object> weaponMap = (Map<String, Object>) item;
+                            
+                            try {
+                                // 直接轉換，因為 bonusAttributes 和 stateAttributes 現在是 List<String> 類型
+                                Weapon weapon = objectMapper.convertValue(weaponMap, Weapon.class);
+                                weaponList.add(weapon);
+                            } catch (Exception e) {
+                                logger.error("處理武器數據時發生錯誤: {}", e.getMessage(), e);
+                            }
+                        } else {
+                            Weapon weapon = objectMapper.convertValue(item, Weapon.class);
+                            weaponList.add(weapon);
+                        }
+                    }
+                }
+            } else {
+                // 如果 data 不是 List，嘗試直接轉換
+                weaponList = objectMapper.convertValue(message.getData(), 
+                    objectMapper.getTypeFactory().constructCollectionType(List.class, Weapon.class));
+            }
+            
+            List<Weapon> savedWeapons = new ArrayList<>();
+            for (Weapon weapon : weaponList) {
+                Weapon savedWeapon = weaponService.saveWeaponSmart(weapon);
+                savedWeapons.add(savedWeapon);
+            }
+            
+            logger.info("成功批量插入武器: count={}, requestId={}", 
+                       savedWeapons.size(), message.getRequestId());
+            
+            // 發送回傳消息
+            sendResponse(message.getRequestId(), "success", "成功批量插入武器", savedWeapons);
+            
+        } catch (Exception e) {
+            logger.error("處理批量插入武器請求失敗: {}", e.getMessage(), e);
         }
     }
     

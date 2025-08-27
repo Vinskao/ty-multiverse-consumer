@@ -15,6 +15,9 @@ import com.vinskao.ty_multiverse_consumer.module.people.domain.vo.People;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.ArrayList;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import java.util.stream.Collectors;
 
 /**
@@ -25,6 +28,8 @@ import java.util.stream.Collectors;
 @Service
 @Transactional(readOnly = true, noRollbackFor = {IllegalArgumentException.class, EmptyResultDataAccessException.class})
 public class PeopleService {
+    
+    private static final Logger logger = LoggerFactory.getLogger(PeopleService.class);
 
     private final PeopleRepository peopleRepository;
 
@@ -148,7 +153,41 @@ public class PeopleService {
      */
     @Transactional(readOnly = false)
     public List<People> saveAllPeople(List<People> peopleList) {
-        return saveAll(peopleList);
+        List<People> savedPeopleList = new ArrayList<>();
+        
+        logger.info("開始批量保存角色，總數量: {}", peopleList.size());
+        
+        for (int i = 0; i < peopleList.size(); i++) {
+            People people = peopleList.get(i);
+            try {
+                logger.info("處理第 {} 個角色: name={}", i + 1, people.getName());
+                
+                // 確保基本字段不為 null
+                if (people.getName() == null) {
+                    logger.error("角色名稱為 null，跳過此角色");
+                    continue;
+                }
+                
+                // 設置時間戳
+                if (people.getCreatedAt() == null) {
+                    people.setCreatedAt(LocalDateTime.now());
+                }
+                people.setUpdatedAt(LocalDateTime.now());
+                
+                // 直接保存
+                People savedPeople = peopleRepository.save(people);
+                savedPeopleList.add(savedPeople);
+                
+                logger.info("成功保存角色: name={}, version={}", people.getName(), savedPeople.getVersion());
+                
+            } catch (Exception e) {
+                logger.error("保存角色失敗: name={}, error={}", people.getName(), e.getMessage(), e);
+                // 繼續處理其他角色，不中斷整個批量操作
+            }
+        }
+        
+        logger.info("批量保存完成，成功保存 {} 個角色", savedPeopleList.size());
+        return savedPeopleList;
     }
 
     /**

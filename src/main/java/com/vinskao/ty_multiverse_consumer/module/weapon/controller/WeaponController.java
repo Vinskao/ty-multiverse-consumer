@@ -115,7 +115,7 @@ public class WeaponController {
     @PutMapping("/{name}/bonus-attributes")
     public ResponseEntity<Weapon> updateWeaponBonusAttributes(
             @PathVariable String name,
-            @RequestBody Map<String, String> request) {
+            @RequestBody Map<String, List<String>> request) {
         return ResponseEntity.ok(weaponService.updateWeaponBonusAttributes(name, request.get("bonusAttributes")));
     }
 
@@ -125,7 +125,7 @@ public class WeaponController {
     @PutMapping("/{name}/state-attributes")
     public ResponseEntity<Weapon> updateWeaponStateAttributes(
             @PathVariable String name,
-            @RequestBody Map<String, String> request) {
+            @RequestBody Map<String, List<String>> request) {
         return ResponseEntity.ok(weaponService.updateWeaponStateAttributes(name, request.get("stateAttributes")));
     }
 

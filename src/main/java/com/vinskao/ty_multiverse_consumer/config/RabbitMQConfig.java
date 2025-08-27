@@ -12,28 +12,30 @@ import org.springframework.context.annotation.Configuration;
 public class RabbitMQConfig {
 
     // People 隊列名稱
-    public static final String PEOPLE_INSERT_QUEUE = "people.insert.queue";
-    public static final String PEOPLE_UPDATE_QUEUE = "people.update.queue";
-    public static final String PEOPLE_INSERT_MULTIPLE_QUEUE = "people.insert.multiple.queue";
-    public static final String PEOPLE_GET_ALL_QUEUE = "people.get.all.queue";
-    public static final String PEOPLE_GET_BY_NAME_QUEUE = "people.get.by.name.queue";
-    public static final String PEOPLE_DELETE_QUEUE = "people.delete.queue";
-    public static final String PEOPLE_DAMAGE_CALCULATION_QUEUE = "people.damage.calculation.queue";
+    public static final String PEOPLE_INSERT_QUEUE = "people-insert";
+    public static final String PEOPLE_UPDATE_QUEUE = "people-update";
+    public static final String PEOPLE_INSERT_MULTIPLE_QUEUE = "people-insert-multiple";
+    public static final String PEOPLE_GET_ALL_QUEUE = "people-get-all";
+    public static final String PEOPLE_GET_BY_NAME_QUEUE = "people-get-by-name";
+    public static final String PEOPLE_DELETE_QUEUE = "people-delete";
+    public static final String PEOPLE_DELETE_ALL_QUEUE = "people-delete-all";
+    public static final String PEOPLE_DAMAGE_CALCULATION_QUEUE = "people-damage-calculation";
 
     // Weapon 隊列名稱
-    public static final String WEAPON_GET_ALL_QUEUE = "weapon.get.all.queue";
-    public static final String WEAPON_GET_BY_NAME_QUEUE = "weapon.get.by.name.queue";
-    public static final String WEAPON_GET_BY_OWNER_QUEUE = "weapon.get.by.owner.queue";
-    public static final String WEAPON_SAVE_QUEUE = "weapon.save.queue";
-    public static final String WEAPON_DELETE_QUEUE = "weapon.delete.queue";
-    public static final String WEAPON_DELETE_ALL_QUEUE = "weapon.delete.all.queue";
-    public static final String WEAPON_EXISTS_QUEUE = "weapon.exists.queue";
-    public static final String WEAPON_UPDATE_ATTRIBUTES_QUEUE = "weapon.update.attributes.queue";
-    public static final String WEAPON_UPDATE_BASE_DAMAGE_QUEUE = "weapon.update.base.damage.queue";
+    public static final String WEAPON_GET_ALL_QUEUE = "weapon-get-all";
+    public static final String WEAPON_GET_BY_NAME_QUEUE = "weapon-get-by-name";
+    public static final String WEAPON_GET_BY_OWNER_QUEUE = "weapon-get-by-owner";
+    public static final String WEAPON_SAVE_QUEUE = "weapon-save";
+    public static final String WEAPON_INSERT_MULTIPLE_QUEUE = "weapon-insert-multiple";
+    public static final String WEAPON_DELETE_QUEUE = "weapon-delete";
+    public static final String WEAPON_DELETE_ALL_QUEUE = "weapon-delete-all";
+    public static final String WEAPON_EXISTS_QUEUE = "weapon-exists";
+    public static final String WEAPON_UPDATE_ATTRIBUTES_QUEUE = "weapon-update-attributes";
+    public static final String WEAPON_UPDATE_BASE_DAMAGE_QUEUE = "weapon-update-base-damage";
 
     // 交換機名稱
-    public static final String PEOPLE_EXCHANGE = "people.exchange";
-    public static final String WEAPON_EXCHANGE = "weapon.exchange";
+    public static final String PEOPLE_EXCHANGE = "tymb-exchange";
+    public static final String WEAPON_EXCHANGE = "tymb-exchange";
     public static final String PEOPLE_RESPONSE_EXCHANGE = "people-response";
     public static final String WEAPON_RESPONSE_EXCHANGE = "weapon-response";
 
@@ -44,12 +46,14 @@ public class RabbitMQConfig {
     public static final String PEOPLE_GET_ALL_ROUTING_KEY = "people.get.all";
     public static final String PEOPLE_GET_BY_NAME_ROUTING_KEY = "people.get.by.name";
     public static final String PEOPLE_DELETE_ROUTING_KEY = "people.delete";
+    public static final String PEOPLE_DELETE_ALL_ROUTING_KEY = "people.delete.all";
     public static final String PEOPLE_DAMAGE_CALCULATION_ROUTING_KEY = "people.damage.calculation";
 
     public static final String WEAPON_GET_ALL_ROUTING_KEY = "weapon.get.all";
     public static final String WEAPON_GET_BY_NAME_ROUTING_KEY = "weapon.get.by.name";
     public static final String WEAPON_GET_BY_OWNER_ROUTING_KEY = "weapon.get.by.owner";
     public static final String WEAPON_SAVE_ROUTING_KEY = "weapon.save";
+    public static final String WEAPON_INSERT_MULTIPLE_ROUTING_KEY = "weapon.insert.multiple";
     public static final String WEAPON_DELETE_ROUTING_KEY = "weapon.delete";
     public static final String WEAPON_DELETE_ALL_ROUTING_KEY = "weapon.delete.all";
     public static final String WEAPON_EXISTS_ROUTING_KEY = "weapon.exists";
@@ -98,6 +102,11 @@ public class RabbitMQConfig {
     }
 
     @Bean
+    public Queue peopleDeleteAllQueue() {
+        return new Queue(PEOPLE_DELETE_ALL_QUEUE, true);
+    }
+
+    @Bean
     public Queue peopleDamageCalculationQueue() {
         return new Queue(PEOPLE_DAMAGE_CALCULATION_QUEUE, true);
     }
@@ -132,6 +141,11 @@ public class RabbitMQConfig {
     @Bean
     public Queue weaponSaveQueue() {
         return new Queue(WEAPON_SAVE_QUEUE, true);
+    }
+
+    @Bean
+    public Queue weaponInsertMultipleQueue() {
+        return new Queue(WEAPON_INSERT_MULTIPLE_QUEUE, true);
     }
 
     @Bean
@@ -224,6 +238,13 @@ public class RabbitMQConfig {
     }
 
     @Bean
+    public Binding peopleDeleteAllBinding() {
+        return BindingBuilder.bind(peopleDeleteAllQueue())
+                .to(peopleExchange())
+                .with(PEOPLE_DELETE_ALL_ROUTING_KEY);
+    }
+
+    @Bean
     public Binding peopleDamageCalculationBinding() {
         return BindingBuilder.bind(peopleDamageCalculationQueue())
                 .to(peopleExchange())
@@ -279,6 +300,13 @@ public class RabbitMQConfig {
         return BindingBuilder.bind(weaponSaveQueue())
                 .to(weaponExchange())
                 .with(WEAPON_SAVE_ROUTING_KEY);
+    }
+
+    @Bean
+    public Binding weaponInsertMultipleBinding() {
+        return BindingBuilder.bind(weaponInsertMultipleQueue())
+                .to(weaponExchange())
+                .with(WEAPON_INSERT_MULTIPLE_ROUTING_KEY);
     }
 
     @Bean

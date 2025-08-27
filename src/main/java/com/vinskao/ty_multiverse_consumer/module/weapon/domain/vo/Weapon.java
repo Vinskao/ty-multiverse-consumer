@@ -64,17 +64,17 @@ public class Weapon {
 
     /**
      * 加成屬性列表
-     * <p>武器的額外屬性，以JSON字串形式儲存</p>
+     * <p>武器的額外屬性，以PostgreSQL數組形式儲存</p>
      */
-    @Column(name = "bonus_attributes", columnDefinition = "TEXT")
-    private String bonusAttributes;
+    @Column(name = "bonus_attributes", columnDefinition = "text[]")
+    private List<String> bonusAttributes;
 
     /**
      * 狀態屬性列表
-     * <p>武器的狀態相關屬性，以JSON字串形式儲存</p>
+     * <p>武器的狀態相關屬性，以PostgreSQL數組形式儲存</p>
      */
-    @Column(name = "state_attributes", columnDefinition = "TEXT")
-    private String stateAttributes;
+    @Column(name = "state_attributes", columnDefinition = "text[]")
+    private List<String> stateAttributes;
 
     /**
      * 嵌入向量
@@ -118,7 +118,7 @@ public class Weapon {
      * @param stateAttributes 狀態屬性列表
      */
     public Weapon(String name, String owner, String attributes, Integer baseDamage, 
-                 Integer bonusDamage, String bonusAttributes, String stateAttributes) {
+                 Integer bonusDamage, List<String> bonusAttributes, List<String> stateAttributes) {
         this.name = name;
         this.owner = owner;
         this.attributes = attributes;
@@ -245,7 +245,7 @@ public class Weapon {
      * 
      * @return 加成屬性列表
      */
-    public String getBonusAttributes() {
+    public List<String> getBonusAttributes() {
         return this.bonusAttributes;
     }
 
@@ -254,7 +254,7 @@ public class Weapon {
      * 
      * @param bonusAttributes 加成屬性列表
      */
-    public void setBonusAttributes(String bonusAttributes) {
+    public void setBonusAttributes(List<String> bonusAttributes) {
         this.bonusAttributes = bonusAttributes;
     }
 
@@ -263,7 +263,7 @@ public class Weapon {
      * 
      * @return 狀態屬性列表
      */
-    public String getStateAttributes() {
+    public List<String> getStateAttributes() {
         return this.stateAttributes;
     }
 
@@ -272,7 +272,7 @@ public class Weapon {
      * 
      * @param stateAttributes 狀態屬性列表
      */
-    public void setStateAttributes(String stateAttributes) {
+    public void setStateAttributes(List<String> stateAttributes) {
         this.stateAttributes = stateAttributes;
     }
 

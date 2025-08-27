@@ -4,9 +4,9 @@ metadata:
   name: ty-multiverse-consumer-secrets
 type: Opaque
 stringData:
-  SPRING_PEOPLE_DATASOURCE_URL: "${SPRING_PEOPLE_DATASOURCE_URL}"
-  SPRING_PEOPLE_DATASOURCE_USERNAME: "${SPRING_PEOPLE_DATASOURCE_USERNAME}"
-  SPRING_PEOPLE_DATASOURCE_PASSWORD: "${SPRING_PEOPLE_DATASOURCE_PASSWORD}"
+  SPRING_DATASOURCE_URL: "${SPRING_DATASOURCE_URL}"
+  SPRING_DATASOURCE_USERNAME: "${SPRING_DATASOURCE_USERNAME}"
+  SPRING_DATASOURCE_PASSWORD: "${SPRING_DATASOURCE_PASSWORD}"
   REDIS_HOST: "${REDIS_HOST}"
   REDIS_CUSTOM_PORT: "${REDIS_CUSTOM_PORT}"
   REDIS_PASSWORD: "${REDIS_PASSWORD}"
@@ -84,21 +84,21 @@ spec:
             configMapKeyRef:
               name: ty-multiverse-consumer-config
               key: LOGGING_LEVEL_SPRINGFRAMEWORK
-        - name: SPRING_PEOPLE_DATASOURCE_URL
+        - name: SPRING_DATASOURCE_URL
           valueFrom:
             secretKeyRef:
               name: ty-multiverse-consumer-secrets
-              key: SPRING_PEOPLE_DATASOURCE_URL
-        - name: SPRING_PEOPLE_DATASOURCE_USERNAME
+              key: SPRING_DATASOURCE_URL
+        - name: SPRING_DATASOURCE_USERNAME
           valueFrom:
             secretKeyRef:
               name: ty-multiverse-consumer-secrets
-              key: SPRING_PEOPLE_DATASOURCE_USERNAME
-        - name: SPRING_PEOPLE_DATASOURCE_PASSWORD
+              key: SPRING_DATASOURCE_USERNAME
+        - name: SPRING_DATASOURCE_PASSWORD
           valueFrom:
             secretKeyRef:
               name: ty-multiverse-consumer-secrets
-              key: SPRING_PEOPLE_DATASOURCE_PASSWORD
+              key: SPRING_DATASOURCE_PASSWORD
         - name: KEYCLOAK_AUTH_SERVER_URL
           valueFrom:
             secretKeyRef:
@@ -154,7 +154,7 @@ spec:
             secretKeyRef:
               name: ty-multiverse-consumer-secrets
               key: REDIS_QUEUE_TYMB
-        - name: SPRING_PEOPLE_DATASOURCE_ENABLED
+        - name: SPRING_DATASOURCE_ENABLED
           value: "false"
         # RabbitMQ 配置 - Production 環境啟用
         - name: RABBITMQ_ENABLED

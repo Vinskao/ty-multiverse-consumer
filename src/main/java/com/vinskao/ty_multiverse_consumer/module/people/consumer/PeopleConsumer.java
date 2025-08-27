@@ -12,6 +12,9 @@ import com.vinskao.ty_multiverse_consumer.module.people.service.PeopleService;
 import com.vinskao.ty_multiverse_consumer.module.people.domain.vo.People;
 
 import java.util.List;
+import java.util.ArrayList;
+import java.util.Map;
+import java.io.IOException;
 
 /**
  * People 模組 Consumer
@@ -95,8 +98,52 @@ public class PeopleConsumer {
             logger.info("收到插入多個角色請求: {}", messageJson);
             
             PeopleMessageDTO message = objectMapper.readValue(messageJson, PeopleMessageDTO.class);
-            @SuppressWarnings("unchecked")
-            List<People> peopleList = (List<People>) message.getData();
+            
+            // 正確地將 data 轉換為 List<People>
+            List<People> peopleList;
+            if (message.getData() instanceof List) {
+                // 如果 data 已經是 List，需要將每個元素轉換為 People 對象
+                @SuppressWarnings("unchecked")
+                List<Object> dataList = (List<Object>) message.getData();
+                peopleList = new ArrayList<>();
+                for (Object item : dataList) {
+                    if (item instanceof People) {
+                        peopleList.add((People) item);
+                    } else {
+                        // 將 LinkedHashMap 轉換為 People 對象
+                        // 先處理數組類型的字段，將其轉換為 JSON 字符串
+                        if (item instanceof Map) {
+                            @SuppressWarnings("unchecked")
+                            Map<String, Object> peopleMap = (Map<String, Object>) item;
+                            
+                            try {
+                                // 處理 baseAttributes、bonusAttributes 和 stateAttributes 字段
+                                if (peopleMap.containsKey("baseAttributes") && peopleMap.get("baseAttributes") instanceof List) {
+                                    peopleMap.put("baseAttributes", objectMapper.writeValueAsString(peopleMap.get("baseAttributes")));
+                                }
+                                if (peopleMap.containsKey("bonusAttributes") && peopleMap.get("bonusAttributes") instanceof List) {
+                                    peopleMap.put("bonusAttributes", objectMapper.writeValueAsString(peopleMap.get("bonusAttributes")));
+                                }
+                                if (peopleMap.containsKey("stateAttributes") && peopleMap.get("stateAttributes") instanceof List) {
+                                    peopleMap.put("stateAttributes", objectMapper.writeValueAsString(peopleMap.get("stateAttributes")));
+                                }
+                                
+                                People people = objectMapper.convertValue(peopleMap, People.class);
+                                peopleList.add(people);
+                            } catch (IOException e) {
+                                logger.error("處理角色數據時發生錯誤: {}", e.getMessage(), e);
+                            }
+                        } else {
+                            People people = objectMapper.convertValue(item, People.class);
+                            peopleList.add(people);
+                        }
+                    }
+                }
+            } else {
+                // 如果 data 不是 List，嘗試直接轉換
+                peopleList = objectMapper.convertValue(message.getData(), 
+                    objectMapper.getTypeFactory().constructCollectionType(List.class, People.class));
+            }
             
             List<People> savedPeople = peopleService.saveAllPeople(peopleList);
             
@@ -176,6 +223,28 @@ public class PeopleConsumer {
             
         } catch (Exception e) {
             logger.error("處理刪除角色請求失敗: {}", e.getMessage(), e);
+        }
+    }
+    
+    /**
+     * 處理刪除所有角色請求
+     */
+    @RabbitListener(queues = "people-delete-all")
+    public void handleDeleteAllPeople(String messageJson) {
+        try {
+            logger.info("收到刪除所有角色請求: {}", messageJson);
+            
+            PeopleMessageDTO message = objectMapper.readValue(messageJson, PeopleMessageDTO.class);
+            
+            peopleService.deleteAllPeople();
+            
+            logger.info("成功刪除所有角色: requestId={}", message.getRequestId());
+            
+            // 發送回傳消息
+            sendResponse(message.getRequestId(), "success", "成功刪除所有角色", null);
+            
+        } catch (Exception e) {
+            logger.error("處理刪除所有角色請求失敗: {}", e.getMessage(), e);
         }
     }
     
