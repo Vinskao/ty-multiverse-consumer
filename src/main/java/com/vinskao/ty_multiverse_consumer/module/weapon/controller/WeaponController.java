@@ -3,6 +3,13 @@ package com.vinskao.ty_multiverse_consumer.module.weapon.controller;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
 import com.vinskao.ty_multiverse_consumer.module.weapon.service.WeaponService;
 import com.vinskao.ty_multiverse_consumer.module.weapon.domain.vo.Weapon;
 
@@ -11,57 +18,77 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/weapons")
+@Tag(name = "Weapon Management", description = "武器管理相關 API")
 public class WeaponController {
 
     @Autowired
     private WeaponService weaponService;
 
-    /**
-     * Get all weapons
-     */
+    @Operation(summary = "獲取所有武器", description = "獲取數據庫中所有武器的列表")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "成功獲取武器列表", 
+                    content = @Content(schema = @Schema(implementation = Weapon.class))),
+        @ApiResponse(responseCode = "500", description = "服務器內部錯誤")
+    })
     @GetMapping
     public ResponseEntity<List<Weapon>> getAllWeapons() {
         return ResponseEntity.ok(weaponService.getAllWeapons());
     }
 
-    /**
-     * Get weapon by name (ID)
-     */
+    @Operation(summary = "根據名稱獲取武器", description = "根據武器名稱獲取特定武器的信息")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "成功獲取武器信息", 
+                    content = @Content(schema = @Schema(implementation = Weapon.class))),
+        @ApiResponse(responseCode = "404", description = "武器不存在"),
+        @ApiResponse(responseCode = "500", description = "服務器內部錯誤")
+    })
     @GetMapping("/{name}")
-    public ResponseEntity<Weapon> getWeaponById(@PathVariable String name) {
+    public ResponseEntity<Weapon> getWeaponById(@Parameter(description = "武器名稱") @PathVariable String name) {
         return weaponService.getWeaponById(name)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    /**
-     * Get weapons by owner
-     */
+    @Operation(summary = "根據擁有者獲取武器", description = "獲取特定擁有者的所有武器")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "成功獲取武器列表", 
+                    content = @Content(schema = @Schema(implementation = Weapon.class))),
+        @ApiResponse(responseCode = "500", description = "服務器內部錯誤")
+    })
     @GetMapping("/owner/{owner}")
-    public ResponseEntity<List<Weapon>> getWeaponsByOwner(@PathVariable String owner) {
+    public ResponseEntity<List<Weapon>> getWeaponsByOwner(@Parameter(description = "武器擁有者") @PathVariable String owner) {
         return ResponseEntity.ok(weaponService.getWeaponsByOwner(owner));
     }
 
-    /**
-     * Create or update a weapon
-     */
+    @Operation(summary = "創建或更新武器", description = "創建新武器或更新現有武器")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "武器保存成功", 
+                    content = @Content(schema = @Schema(implementation = Weapon.class))),
+        @ApiResponse(responseCode = "400", description = "請求參數錯誤"),
+        @ApiResponse(responseCode = "500", description = "服務器內部錯誤")
+    })
     @PostMapping
     public ResponseEntity<Weapon> saveWeapon(@RequestBody Weapon weapon) {
         return ResponseEntity.ok(weaponService.saveWeaponSmart(weapon));
     }
 
-    /**
-     * Delete a weapon by name (ID)
-     */
+    @Operation(summary = "刪除武器", description = "根據武器名稱刪除特定武器")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "武器刪除成功"),
+        @ApiResponse(responseCode = "404", description = "武器不存在"),
+        @ApiResponse(responseCode = "500", description = "服務器內部錯誤")
+    })
     @DeleteMapping("/{name}")
-    public ResponseEntity<Void> deleteWeapon(@PathVariable String name) {
+    public ResponseEntity<Void> deleteWeapon(@Parameter(description = "武器名稱") @PathVariable String name) {
         weaponService.deleteWeapon(name);
         return ResponseEntity.ok().build();
     }
 
-    /**
-     * Delete all weapons
-     */
+    @Operation(summary = "刪除所有武器", description = "刪除數據庫中所有武器")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "所有武器刪除成功"),
+        @ApiResponse(responseCode = "500", description = "服務器內部錯誤")
+    })
     @DeleteMapping("/delete-all")
     public ResponseEntity<Void> deleteAllWeapons() {
         weaponService.deleteAllWeapons();

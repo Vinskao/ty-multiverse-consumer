@@ -1,6 +1,7 @@
 package com.vinskao.ty_multiverse_consumer.config;
 
 import org.springframework.amqp.core.*;
+import org.springframework.amqp.core.QueueBuilder;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
@@ -109,6 +110,13 @@ public class RabbitMQConfig {
     @Bean
     public Queue peopleDamageCalculationQueue() {
         return new Queue(PEOPLE_DAMAGE_CALCULATION_QUEUE, true);
+    }
+    
+    @Bean
+    public Queue damageCalculationQueue() {
+        return QueueBuilder.durable("damage-calculation")
+                .withArgument("x-message-ttl", 300000) // 5分鐘 TTL
+                .build();
     }
     
     // 回傳隊列
@@ -249,6 +257,13 @@ public class RabbitMQConfig {
         return BindingBuilder.bind(peopleDamageCalculationQueue())
                 .to(peopleExchange())
                 .with(PEOPLE_DAMAGE_CALCULATION_ROUTING_KEY);
+    }
+    
+    @Bean
+    public Binding damageCalculationBinding() {
+        return BindingBuilder.bind(damageCalculationQueue())
+                .to(peopleExchange())
+                .with("damage.calculation");
     }
     
     // 綁定回傳隊列到回傳交換機

@@ -29,7 +29,7 @@ spring:
       auto-commit: true 
   jpa:
     hibernate:
-      ddl-auto: none
+      ddl-auto: update
     show-sql: true
     open-in-view: false
     properties:
@@ -37,7 +37,7 @@ spring:
         format_sql: true
         dialect: org.hibernate.dialect.PostgreSQLDialect
         hbm2ddl:
-          auto: none
+          auto: update
         connection:
           release_mode: after_transaction
         jdbc:

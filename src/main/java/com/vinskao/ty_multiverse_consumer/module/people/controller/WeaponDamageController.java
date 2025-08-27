@@ -8,6 +8,13 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import com.vinskao.ty_multiverse_consumer.module.people.service.WeaponDamageService;
 import com.vinskao.ty_multiverse_consumer.module.people.domain.dto.BatchDamageRequestDTO;
@@ -19,6 +26,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/people")
+@Tag(name = "Weapon Damage Calculation", description = "武器傷害計算相關 API")
 public class WeaponDamageController {
 
     private final WeaponDamageService weaponDamageService;
@@ -32,19 +40,16 @@ public class WeaponDamageController {
         this.weaponDamageService = weaponDamageService;
     }
 
-    /**
-     * Calculate damage with owner's weapon.
-     * Example: /people/damageWithWeapon?name=Draeny
-     *
-     * @param name person name (owner)
-     * @return damageWithWeapon value in JSON {"damageWithWeapon": value}
-     * 
-     * 異步處理邏輯：
-     * - 本地環境：同步處理
-     * - 生產環境：發送消息到 RabbitMQ，立即回應請求ID
-     */
+    @Operation(summary = "計算武器傷害", description = "計算指定角色的武器傷害值")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "傷害計算成功", 
+                    content = @Content(schema = @Schema(implementation = Integer.class))),
+        @ApiResponse(responseCode = "202", description = "異步處理中，請稍後查詢結果"),
+        @ApiResponse(responseCode = "400", description = "請求參數錯誤"),
+        @ApiResponse(responseCode = "500", description = "服務器內部錯誤")
+    })
     @GetMapping("/damageWithWeapon")
-    public ResponseEntity<?> damageWithWeapon(@RequestParam("name") String name) {
+    public ResponseEntity<?> damageWithWeapon(@Parameter(description = "角色名稱") @RequestParam("name") String name) {
         // 如果 RabbitMQ 啟用，使用異步處理
         if (asyncMessageService != null) {
             String requestId = asyncMessageService.sendDamageCalculationRequest(name);
@@ -63,13 +68,13 @@ public class WeaponDamageController {
         return ResponseEntity.ok(result);
     }
 
-    /**
-     * Batch calculate damage with weapons for multiple characters.
-     * Optimized to reduce database connections and improve performance.
-     *
-     * @param request batch request containing character names
-     * @return batch damage calculation results
-     */
+    @Operation(summary = "批量計算武器傷害", description = "批量計算多個角色的武器傷害值")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "批量傷害計算成功", 
+                    content = @Content(schema = @Schema(implementation = BatchDamageResponseDTO.class))),
+        @ApiResponse(responseCode = "400", description = "請求參數錯誤"),
+        @ApiResponse(responseCode = "500", description = "服務器內部錯誤")
+    })
     @PostMapping("/batchDamageWithWeapon")
     public ResponseEntity<BatchDamageResponseDTO> batchDamageWithWeapon(@RequestBody BatchDamageRequestDTO request) {
         BatchDamageResponseDTO result = weaponDamageService.calculateBatchDamageWithWeapon(request);
