@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import com.vinskao.ty_multiverse_consumer.module.people.service.PeopleService;
+import com.vinskao.ty_multiverse_consumer.module.people.service.WeaponDamageService;
 import com.vinskao.ty_multiverse_consumer.module.people.domain.vo.People;
 
 import java.util.List;
@@ -34,6 +35,9 @@ public class PeopleConsumer {
     
     @Autowired
     private PeopleService peopleService;
+    
+    @Autowired
+    private WeaponDamageService weaponDamageService;
     
     @Autowired
     private ObjectMapper objectMapper;
@@ -253,20 +257,32 @@ public class PeopleConsumer {
      */
     @RabbitListener(queues = "people-damage-calculation")
     public void handlePeopleDamageCalculation(String messageJson) {
+        PeopleMessageDTO message = null;
         try {
             logger.info("收到角色傷害計算請求: {}", messageJson);
             
-            PeopleMessageDTO message = objectMapper.readValue(messageJson, PeopleMessageDTO.class);
+            message = objectMapper.readValue(messageJson, PeopleMessageDTO.class);
             String characterName = (String) message.getData();
             
-            // 這裡可以調用傷害計算服務
-            // 例如：damageCalculationService.calculateDamage(characterName);
-            
-            logger.info("成功處理角色傷害計算: characterName={}, requestId={}", 
+            logger.info("開始計算角色傷害: characterName={}, requestId={}", 
                        characterName, message.getRequestId());
+            
+            // 調用傷害計算服務
+            int damage = weaponDamageService.calculateDamageWithWeapon(characterName);
+            
+            logger.info("傷害計算完成: characterName={}, damage={}, requestId={}", 
+                       characterName, damage, message.getRequestId());
+            
+            // 發送回傳消息
+            sendResponse(message.getRequestId(), "success", "傷害計算完成", damage);
             
         } catch (Exception e) {
             logger.error("處理角色傷害計算請求失敗: {}", e.getMessage(), e);
+            
+            // 發送錯誤回傳消息
+            if (message != null) {
+                sendResponse(message.getRequestId(), "error", "傷害計算失敗: " + e.getMessage(), null);
+            }
         }
     }
     
