@@ -67,4 +67,62 @@ public class DamageCalculationResult {
         this.status = "processing";
         this.createdAt = LocalDateTime.now();
     }
+    
+    // 手動添加 getter 方法
+    public String getRequestId() {
+        return requestId;
+    }
+    
+    public String getCharacterName() {
+        return characterName;
+    }
+    
+    public Integer getDamageValue() {
+        return damageValue;
+    }
+    
+    public String getStatus() {
+        return status;
+    }
+    
+    public String getErrorMessage() {
+        return errorMessage;
+    }
+    
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+    
+    public LocalDateTime getCompletedAt() {
+        return completedAt;
+    }
+    
+    // 手動添加 setter 方法
+    public void setRequestId(String requestId) {
+        this.requestId = requestId;
+    }
+    
+    public void setCharacterName(String characterName) {
+        this.characterName = characterName;
+    }
+    
+    public void setDamageValue(Integer damageValue) {
+        this.damageValue = damageValue;
+    }
+    
+    public void setStatus(String status) {
+        this.status = status;
+    }
+    
+    public void setErrorMessage(String errorMessage) {
+        this.errorMessage = errorMessage;
+    }
+    
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
+    }
+    
+    public void setCompletedAt(LocalDateTime completedAt) {
+        this.completedAt = completedAt;
+    }
 }

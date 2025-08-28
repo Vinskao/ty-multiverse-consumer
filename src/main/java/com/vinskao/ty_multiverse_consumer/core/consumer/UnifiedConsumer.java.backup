@@ -168,7 +168,7 @@ public class UnifiedConsumer {
     /**
      * 處理根據名稱獲取角色請求
      */
-    // @RabbitListener(queues = "people-get-by-name", concurrency = "2")
+    @RabbitListener(queues = "people-get-by-name", concurrency = "2")
     public void handlePeopleGetByName(String messageJson) {
         try {
             logger.info("收到根據名稱獲取角色請求: {}", messageJson);

@@ -29,7 +29,7 @@ public class AsyncMessageService {
         
         // 發送到 RabbitMQ
         rabbitTemplate.convertAndSend(
-            RabbitMQConfig.PEOPLE_EXCHANGE,
+            RabbitMQConfig.MAIN_EXCHANGE,
             RabbitMQConfig.PEOPLE_GET_ALL_ROUTING_KEY,
             request
         );
@@ -54,7 +54,7 @@ public class AsyncMessageService {
         
         // 發送到 RabbitMQ
         rabbitTemplate.convertAndSend(
-            RabbitMQConfig.PEOPLE_EXCHANGE,
+            RabbitMQConfig.MAIN_EXCHANGE,
             RabbitMQConfig.PEOPLE_DAMAGE_CALCULATION_ROUTING_KEY,
             request
         );

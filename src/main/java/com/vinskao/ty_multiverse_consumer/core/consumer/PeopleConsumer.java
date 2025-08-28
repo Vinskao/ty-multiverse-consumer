@@ -8,7 +8,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import com.vinskao.ty_multiverse_consumer.core.dto.AsyncMessageDTO;
-import com.vinskao.ty_multiverse_consumer.core.service.ConsumerResponseService;
+import com.vinskao.ty_multiverse_consumer.core.service.AsyncResultService;
 import com.vinskao.ty_multiverse_consumer.module.people.domain.vo.People;
 import com.vinskao.ty_multiverse_consumer.module.people.service.PeopleService;
 
@@ -37,12 +37,12 @@ public class PeopleConsumer {
     private PeopleService peopleService;
     
     @Autowired
-    private ConsumerResponseService consumerResponseService;
+    private AsyncResultService asyncResultService;
     
     /**
      * 監聽 People 獲取所有請求
      */
-    @RabbitListener(queues = "people-get-all")
+    @RabbitListener(queues = "people-get-all", concurrency = "2")
     public void handleGetAllPeople(String messageJson) {
         try {
             logger.info("收到獲取所有角色請求: {}", messageJson);
@@ -64,12 +64,8 @@ public class PeopleConsumer {
                            people.getJob(), people.getAttributes());
             }
             
-            // 發送成功回應給 Producer
-            consumerResponseService.sendPeopleGetAllSuccessResponse(
-                requestId,
-                "角色列表獲取成功",
-                peopleList
-            );
+            // 發送成功結果給 Producer
+            asyncResultService.sendCompletedResult(requestId, peopleList);
             
             logger.info("回傳消息解析成功: requestId={}, status=success, count={}", 
                        requestId, peopleList.size());
@@ -82,13 +78,8 @@ public class PeopleConsumer {
                 AsyncMessageDTO message = objectMapper.readValue(messageJson, AsyncMessageDTO.class);
                 String requestId = message.getRequestId();
                 
-                // 發送錯誤回應給 Producer
-                consumerResponseService.sendPeopleErrorResponse(
-                    requestId,
-                    "獲取角色列表失敗",
-                    "PEOPLE_GET_ALL_ERROR",
-                    e.getMessage()
-                );
+                // 發送錯誤結果給 Producer
+                asyncResultService.sendFailedResult(requestId, "獲取角色列表失敗: " + e.getMessage());
                 
             } catch (Exception parseError) {
                 logger.error("無法解析請求ID，無法發送錯誤回應: {}", parseError.getMessage());
@@ -99,7 +90,7 @@ public class PeopleConsumer {
     /**
      * 監聽 People 根據名稱獲取請求
      */
-    @RabbitListener(queues = "people-get-by-name")
+    @RabbitListener(queues = "people-get-by-name", concurrency = "2")
     public void handleGetPeopleByName(String messageJson) {
         try {
             logger.info("收到根據名稱獲取角色請求: {}", messageJson);
@@ -117,22 +108,13 @@ public class PeopleConsumer {
                 People people = peopleOptional.get();
                 logger.info("成功獲取角色: name={}, requestId={}", name, requestId);
                 
-                // 發送成功回應給 Producer
-                consumerResponseService.sendPeopleSuccessResponse(
-                    requestId,
-                    "角色獲取成功",
-                    people
-                );
+                // 發送成功結果給 Producer
+                asyncResultService.sendCompletedResult(requestId, people);
             } else {
                 logger.warn("角色不存在: name={}, requestId={}", name, requestId);
                 
-                // 發送錯誤回應給 Producer
-                consumerResponseService.sendPeopleErrorResponse(
-                    requestId,
-                    "角色不存在",
-                    "PEOPLE_NOT_FOUND",
-                    "角色名稱: " + name
-                );
+                // 發送錯誤結果給 Producer
+                asyncResultService.sendFailedResult(requestId, "角色不存在: " + name);
             }
             
         } catch (Exception e) {
@@ -143,13 +125,8 @@ public class PeopleConsumer {
                 AsyncMessageDTO message = objectMapper.readValue(messageJson, AsyncMessageDTO.class);
                 String requestId = message.getRequestId();
                 
-                // 發送錯誤回應給 Producer
-                consumerResponseService.sendPeopleErrorResponse(
-                    requestId,
-                    "獲取角色失敗",
-                    "PEOPLE_GET_BY_NAME_ERROR",
-                    e.getMessage()
-                );
+                // 發送錯誤結果給 Producer
+                asyncResultService.sendFailedResult(requestId, "獲取角色失敗: " + e.getMessage());
                 
             } catch (Exception parseError) {
                 logger.error("無法解析請求ID，無法發送錯誤回應: {}", parseError.getMessage());
@@ -160,7 +137,7 @@ public class PeopleConsumer {
     /**
      * 監聽 People 刪除所有請求
      */
-    @RabbitListener(queues = "people-delete-all")
+    @RabbitListener(queues = "people-delete-all", concurrency = "2")
     public void handleDeleteAllPeople(String messageJson) {
         try {
             logger.info("收到刪除所有角色請求: {}", messageJson);
@@ -175,12 +152,8 @@ public class PeopleConsumer {
             
             logger.info("成功刪除所有角色: requestId={}", requestId);
             
-            // 發送成功回應給 Producer
-            consumerResponseService.sendPeopleSuccessResponse(
-                requestId,
-                "所有角色刪除成功",
-                null
-            );
+            // 發送成功結果給 Producer
+            asyncResultService.sendCompletedResult(requestId, null);
             
         } catch (Exception e) {
             logger.error("處理刪除所有角色請求失敗: {}", e.getMessage(), e);
@@ -190,13 +163,8 @@ public class PeopleConsumer {
                 AsyncMessageDTO message = objectMapper.readValue(messageJson, AsyncMessageDTO.class);
                 String requestId = message.getRequestId();
                 
-                // 發送錯誤回應給 Producer
-                consumerResponseService.sendPeopleErrorResponse(
-                    requestId,
-                    "刪除所有角色失敗",
-                    "PEOPLE_DELETE_ALL_ERROR",
-                    e.getMessage()
-                );
+                // 發送錯誤結果給 Producer
+                asyncResultService.sendFailedResult(requestId, "刪除所有角色失敗: " + e.getMessage());
                 
             } catch (Exception parseError) {
                 logger.error("無法解析請求ID，無法發送錯誤回應: {}", parseError.getMessage());

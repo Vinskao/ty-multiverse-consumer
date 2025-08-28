@@ -403,4 +403,25 @@ public class People {
                 ", updatedAt='" + updatedAt + '\'' +
                 '}';
     }
+    
+    // 手動添加缺失的 getter 方法
+    public Integer getPhysicPower() {
+        return physicPower;
+    }
+    
+    public Integer getMagicPower() {
+        return magicPower;
+    }
+    
+    public Integer getUtilityPower() {
+        return utilityPower;
+    }
+    
+    public String getAttributes() {
+        return baseAttributes; // 假設 attributes 對應 baseAttributes
+    }
+    
+    public String getStateAttributes() {
+        return stateAttributes;
+    }
 }

@@ -17,7 +17,7 @@ spring:
     # HikariCP 連接池配置 - 最大2個連接
     hikari:
       maximum-pool-size: 2
-      minimum-idle: 0
+      minimum-idle: 1
       connection-timeout: 30000
       idle-timeout: 30000
       max-lifetime: 60000

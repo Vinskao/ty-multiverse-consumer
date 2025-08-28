@@ -13,9 +13,12 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 回應消息 Consumer
+ * 回應消息 Consumer (已禁用)
  * 
- * 負責處理從 Consumer 回傳給 Producer 的消息
+ * 注意：此 Consumer 已禁用，因為 Consumer 端不應該監聽自己的回應隊列
+ * 回應隊列是給 Producer 端監聽的
+ * 
+ * 原本負責處理從 Consumer 回傳給 Producer 的消息
  * 只在 RabbitMQ 啟用時生效
  * 
  * @author TY Backend Team
@@ -36,8 +39,11 @@ public class ResponseConsumer {
     
     /**
      * 監聽 People 回應消息
+     * 
+     * 注意：此方法已禁用，因為 Consumer 端不應該監聽自己的回應隊列
+     * 回應隊列是給 Producer 端監聽的
      */
-    @RabbitListener(queues = "people.response.queue")
+    // @RabbitListener(queues = "people.response.queue", concurrency = "2")
     public void handlePeopleResponse(String messageJson) {
         try {
             logger.info("收到 People 回應消息: {}", messageJson);
@@ -54,8 +60,11 @@ public class ResponseConsumer {
     
     /**
      * 監聽 Weapon 回應消息
+     * 
+     * 注意：此方法已禁用，因為 Consumer 端不應該監聽自己的回應隊列
+     * 回應隊列是給 Producer 端監聽的
      */
-    @RabbitListener(queues = "weapon.response.queue")
+    // @RabbitListener(queues = "weapon.response.queue", concurrency = "2")
     public void handleWeaponResponse(String messageJson) {
         try {
             logger.info("收到 Weapon 回應消息: {}", messageJson);
