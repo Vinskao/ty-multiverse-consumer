@@ -66,20 +66,25 @@ public class AsyncMessageDTO {
     public void setRequestId(String requestId) {
         this.requestId = requestId;
     }
-    
+
     public void setEndpoint(String endpoint) {
         this.endpoint = endpoint;
     }
-    
+
     public void setMethod(String method) {
         this.method = method;
     }
-    
+
     public void setPayload(Object payload) {
         this.payload = payload;
     }
-    
+
     public void setTimestamp(Long timestamp) {
         this.timestamp = timestamp;
+    }
+
+    // 添加缺失的 getter 方法
+    public String getSource() {
+        return "producer"; // 默認返回 producer，因為這是來自 Producer 的消息
     }
 }

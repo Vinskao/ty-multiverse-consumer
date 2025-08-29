@@ -40,49 +40,70 @@ public class PeopleConsumer {
     private AsyncResultService asyncResultService;
     
     /**
-     * 監聽 People 獲取所有請求
+     * 監聽 People 獲取所有請求 - 完全符合 Producer 規範
+     *
+     * 處理來自 Producer 的 POST /tymb/people/get-all 請求
+     * 響應格式完全符合規範要求
      */
     @RabbitListener(queues = "people-get-all", concurrency = "2")
     public void handleGetAllPeople(String messageJson) {
         try {
-            logger.info("收到獲取所有角色請求: {}", messageJson);
-            
+            logger.info("🎯 收到 Producer 的 People Get-All 請求: {}", messageJson);
+
+            // 解析請求消息
             AsyncMessageDTO message = objectMapper.readValue(messageJson, AsyncMessageDTO.class);
             String requestId = message.getRequestId();
-            
-            logger.info("開始獲取所有角色: requestId={}", requestId);
-            
-            // 處理請求
+
+            logger.info("📝 解析請求: requestId={}, endpoint={}, method={}",
+                       requestId, message.getEndpoint(), message.getMethod());
+            logger.info("⏰ 請求時間戳: {}", message.getTimestamp());
+            logger.info("🏷️  來源標識: {}", message.getSource());
+
+            // 處理請求 - 獲取數據庫中的所有 People 數據
+            logger.info("🔄 開始查詢數據庫所有角色數據...");
             List<People> peopleList = peopleService.getAllPeopleOptimized();
-            
-            // 記錄處理結果
-            logger.info("成功獲取所有角色: count={}, requestId={}", peopleList.size(), requestId);
-            logger.info("數據庫中的角色數據: ");
-            for (People people : peopleList) {
-                logger.info("  - 角色: name={}, age={}, gender={}, job={}, attributes={}", 
-                           people.getName(), people.getAge(), people.getGender(), 
-                           people.getJob(), people.getAttributes());
+
+            // 記錄查詢結果統計
+            logger.info("✅ 數據庫查詢完成: 共獲取 {} 個角色", peopleList.size());
+
+            // 詳細記錄前幾個角色的信息（用於調試）
+            if (!peopleList.isEmpty()) {
+                logger.info("📊 角色數據樣本:");
+                int sampleSize = Math.min(5, peopleList.size());
+                for (int i = 0; i < sampleSize; i++) {
+                    People people = peopleList.get(i);
+                    logger.info("  - 角色[{}]: name={}, codeName={}, gender={}, job={}, age={}",
+                               i + 1, people.getName(), people.getCodeName(),
+                               people.getGender(), people.getJob(), people.getAge());
+                }
+                if (peopleList.size() > sampleSize) {
+                    logger.info("  ... 還有 {} 個角色", peopleList.size() - sampleSize);
+                }
             }
-            
-            // 發送成功結果給 Producer
+
+            // 發送成功結果給 Producer - 使用規範格式
+            logger.info("📤 準備發送響應消息到 async-result 隊列");
             asyncResultService.sendCompletedResult(requestId, peopleList);
-            
-            logger.info("回傳消息解析成功: requestId={}, status=success, count={}", 
-                       requestId, peopleList.size());
-            
+
+            logger.info("🎉 People Get-All 請求處理完成!");
+            logger.info("   - requestId: {}", requestId);
+            logger.info("   - 狀態: completed");
+            logger.info("   - 數據量: {} 個角色", peopleList.size());
+            logger.info("   - 發送至: tymb-exchange -> async.result");
+
         } catch (Exception e) {
-            logger.error("處理獲取所有角色請求失敗: {}", e.getMessage(), e);
-            
-            // 嘗試解析請求ID
+            logger.error("❌ People Get-All 請求處理失敗: {}", e.getMessage(), e);
+
+            // 嘗試解析請求ID並發送錯誤響應
             try {
                 AsyncMessageDTO message = objectMapper.readValue(messageJson, AsyncMessageDTO.class);
                 String requestId = message.getRequestId();
-                
-                // 發送錯誤結果給 Producer
+
+                logger.warn("🔄 發送錯誤響應: requestId={}", requestId);
                 asyncResultService.sendFailedResult(requestId, "獲取角色列表失敗: " + e.getMessage());
-                
+
             } catch (Exception parseError) {
-                logger.error("無法解析請求ID，無法發送錯誤回應: {}", parseError.getMessage());
+                logger.error("❌ 無法解析請求ID，無法發送錯誤響應: {}", parseError.getMessage());
             }
         }
     }
