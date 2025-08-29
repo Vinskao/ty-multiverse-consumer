@@ -135,8 +135,8 @@ pipeline {
                                 PEOPLE_DATASOURCE_USERNAME=${SPRING_DATASOURCE_USERNAME}
                                 PEOPLE_DATASOURCE_PASSWORD=${SPRING_DATASOURCE_PASSWORD}
                                 server.port=8081
-                                logging.level.root=INFO
-                                logging.level.org.springframework=INFO
+                                LOGGING_LEVEL=INFO
+                                LOGGING_LEVEL_SPRINGFRAMEWORK=INFO
                                 PUBLIC_TYMB_URL=${PUBLIC_TYMB_URL}
                                 PUBLIC_FRONTEND_URL=${PUBLIC_FRONTEND_URL}
                                 KEYCLOAK_AUTH_SERVER_URL=${KEYCLOAK_AUTH_SERVER_URL}
