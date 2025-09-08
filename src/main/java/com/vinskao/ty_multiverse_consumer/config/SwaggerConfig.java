@@ -7,6 +7,8 @@ import io.swagger.v3.oas.models.info.License;
 import io.swagger.v3.oas.models.servers.Server;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.task.TaskExecutor;
+import org.springframework.core.task.VirtualThreadTaskExecutor;
 
 import java.util.List;
 
@@ -44,5 +46,10 @@ public class SwaggerConfig {
                                 .url("https://api.ty.com/ty_multiverse_consumer")
                                 .description("生產環境")
                 ));
+    }
+
+    @Bean(name = "applicationTaskExecutor")
+    public TaskExecutor applicationTaskExecutor() {
+        return new VirtualThreadTaskExecutor("vt-app-");
     }
 }

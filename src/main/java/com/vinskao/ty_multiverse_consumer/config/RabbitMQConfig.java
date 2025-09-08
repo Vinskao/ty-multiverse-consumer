@@ -10,8 +10,12 @@ import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
 import org.springframework.amqp.support.converter.MessageConverter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.amqp.rabbit.config.SimpleRabbitListenerContainerFactory;
+import org.springframework.amqp.rabbit.annotation.EnableRabbit;
+import org.springframework.core.task.TaskExecutor;
 
 @Configuration
+@EnableRabbit
 public class RabbitMQConfig {
     
     // 在開發環境中，如果隊列已存在但配置不一致，可以設置為 true 來清理隊列
@@ -432,5 +436,18 @@ public class RabbitMQConfig {
         RabbitTemplate rabbitTemplate = new RabbitTemplate(connectionFactory);
         rabbitTemplate.setMessageConverter(jsonMessageConverter());
         return rabbitTemplate;
+    }
+
+    /**
+     * 使用虛擬線程的 RabbitListener 容器工廠
+     */
+    @Bean
+    public SimpleRabbitListenerContainerFactory rabbitListenerContainerFactory(
+            ConnectionFactory connectionFactory,
+            TaskExecutor applicationTaskExecutor) {
+        SimpleRabbitListenerContainerFactory factory = new SimpleRabbitListenerContainerFactory();
+        factory.setConnectionFactory(connectionFactory);
+        factory.setTaskExecutor(applicationTaskExecutor);
+        return factory;
     }
 }

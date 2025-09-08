@@ -6,6 +6,9 @@ server:
 spring:
   application:
     name: ty_multiverse_consumer
+  threads:
+    virtual:
+      enabled: true
   # 數據庫配置 - PostgreSQL
   config:
     import: classpath:env/@env@.properties
