@@ -2,6 +2,25 @@ server:
   port: 8081
   servlet:
     context-path: /ty_multiverse_consumer
+  tomcat:
+    # NIO 配置 - 非阻塞 I/O 優化
+    protocol: org.apache.coyote.http11.Http11NioProtocol
+    # 連接器配置
+    accept-count: 100
+    max-connections: 8192
+    max-http-header-size: 8192
+    max-swallow-size: 2097152
+    # 線程池配置
+    threads:
+      min-spare: 10
+      max: 200
+      max-queue-capacity: 100
+    # 連接超時配置
+    connection-timeout: 20000
+    keep-alive-timeout: 20000
+    # 壓縮配置
+    compression: on
+    "compressable-mime-types": text/html,text/xml,text/plain,text/css,text/javascript,application/javascript,application/json
 
 spring:
   application:
