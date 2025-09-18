@@ -26,6 +26,7 @@ import java.util.List;
  */
 @Component
 @ConditionalOnProperty(name = "spring.rabbitmq.enabled", havingValue = "true")
+@ConditionalOnProperty(name = "spring.rabbitmq.legacy.enabled", havingValue = "true", matchIfMissing = false)
 public class PeopleConsumer {
     
     private static final Logger logger = LoggerFactory.getLogger(PeopleConsumer.class);
@@ -61,7 +62,7 @@ public class PeopleConsumer {
 
             // 處理請求 - 獲取數據庫中的所有 People 數據
             logger.info("🔄 開始查詢數據庫所有角色數據...");
-            List<People> peopleList = peopleService.getAllPeopleOptimized();
+            List<People> peopleList = peopleService.getAllPeopleOptimized().collectList().block();
 
             // 記錄查詢結果統計
             logger.info("✅ 數據庫查詢完成: 共獲取 {} 個角色", peopleList.size());
@@ -123,10 +124,9 @@ public class PeopleConsumer {
             logger.info("開始根據名稱獲取角色: name={}, requestId={}", name, requestId);
             
             // 處理請求
-            var peopleOptional = peopleService.getPeopleByName(name);
-            
-            if (peopleOptional.isPresent()) {
-                People people = peopleOptional.get();
+            People people = peopleService.getPeopleByName(name).block();
+
+            if (people != null) {
                 logger.info("成功獲取角色: name={}, requestId={}", name, requestId);
                 
                 // 發送成功結果給 Producer

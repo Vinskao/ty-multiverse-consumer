@@ -1,22 +1,16 @@
 package com.vinskao.ty_multiverse_consumer.module.weapon.dao;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
+import org.springframework.data.r2dbc.repository.config.EnableR2dbcRepositories;
 
 /**
- * 專門配置 weapon 模組的 repository (已禁用)
- * 使用條件註解禁用此配置，保留配置備用
+ * 專門配置 weapon 模組的 repository (R2DBC)
+ * 配置 R2DBC reactive repositories
  */
 @Configuration
-@ConditionalOnProperty(name = "spring.people-datasource.enabled", havingValue = "true")
-@EnableJpaRepositories(
-    basePackages = "com.vinskao.ty_multiverse_consumer.module.weapon.dao",
-    entityManagerFactoryRef = "peopleEntityManagerFactory",
-    transactionManagerRef = "peopleTransactionManager",
-    repositoryImplementationPostfix = "Impl",
-    repositoryBaseClass = com.vinskao.ty_multiverse_consumer.core.repository.StringPkRepositoryImpl.class
+@EnableR2dbcRepositories(
+    basePackages = "com.vinskao.ty_multiverse_consumer.module.weapon.dao"
 )
 public class WeaponRepositoryConfig {
-    // 使用 StringPkRepositoryImpl 作為基礎實現 (已禁用)
+    // Spring Data R2DBC will automatically create repository implementations
 }

@@ -1,25 +1,23 @@
 package com.vinskao.ty_multiverse_consumer.module.people.domain.vo;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
-import jakarta.persistence.Version;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.annotation.Version;
+import org.springframework.data.relational.core.mapping.Table;
+import org.springframework.data.relational.core.mapping.Column;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
  * 人物圖片實體類別，代表系統中的人物圖片資訊
- * 
+ *
  * <p>此類別包含人物圖片的基本資訊、代號等詳細資料，
  * 支援樂觀鎖定機制防止並發更新衝突。</p>
- * 
+ *
  * @author TY Backend Team
  * @version 1.0
  * @since 2024
  */
-@Entity
-@Table(name = "people_image")
+@Table("people_image")
 @Data
 @NoArgsConstructor
 public class PeopleImage {
@@ -36,21 +34,20 @@ public class PeopleImage {
      * <p>用於防止並發更新衝突，每次更新時版本號會自動遞增</p>
      */
     @Version
-    @Column(name = "version", nullable = true)
     private Long version = 0L;
-    
+
     /**
      * 人物代號
      * <p>對應人物的代號或暱稱</p>
      */
-    @Column(name = "codeName")
+    @Column("codeName")
     private String codeName;
-    
+
     /**
      * 圖片資料
      * <p>儲存圖片的Base64編碼或圖片URL，用於前端顯示</p>
      */
-    @Column(name = "image", columnDefinition = "TEXT")
+    @Column("image")
     private String image;
     
     /**

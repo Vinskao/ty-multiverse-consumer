@@ -7,9 +7,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
 import org.springframework.web.bind.annotation.*;
-import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import reactor.core.publisher.Mono;
+// import org.springframework.orm.ObjectOptimisticLockingFailureException; // Not needed in R2DBC
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -22,7 +22,6 @@ import com.vinskao.ty_multiverse_consumer.module.people.service.PeopleService;
 import com.vinskao.ty_multiverse_consumer.core.service.AsyncMessageService;
 
 import java.util.List;
-import java.util.Optional;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -49,17 +48,12 @@ public class PeopleController {
         @ApiResponse(responseCode = "500", description = "服務器內部錯誤")
     })
     @PostMapping("/insert")
-    public ResponseEntity<?> insertPeople(@RequestBody People people) {
-        try {
-            People savedPeople = peopleService.insertPerson(people);
-            return new ResponseEntity<>(savedPeople, HttpStatus.CREATED);
-        } catch (IllegalArgumentException e) {
-            return new ResponseEntity<>("Invalid input: " + e.getMessage(), HttpStatus.BAD_REQUEST);
-        } catch (RuntimeException e) {
-            return new ResponseEntity<>("Internal server error: " + e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
-        } catch (Exception e) {
-            return new ResponseEntity<>("Unexpected error: " + e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
-        }
+    public Mono<ResponseEntity<Object>> insertPeople(@RequestBody People people) {
+        return peopleService.insertPerson(people)
+            .map(savedPeople -> ResponseEntity.status(HttpStatus.CREATED).body((Object) savedPeople))
+            .onErrorResume(IllegalArgumentException.class, e -> Mono.just(ResponseEntity.badRequest().body((Object) ("Invalid input: " + e.getMessage()))))
+            .onErrorResume(RuntimeException.class, e -> Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body((Object) ("Internal server error: " + e.getMessage()))))
+            .onErrorResume(Exception.class, e -> Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body((Object) ("Unexpected error: " + e.getMessage()))));
     }
 
     @Operation(summary = "更新角色", description = "更新現有角色的信息")
@@ -70,52 +64,43 @@ public class PeopleController {
         @ApiResponse(responseCode = "500", description = "服務器內部錯誤")
     })
     @PostMapping("/update")
-    public ResponseEntity<?> updatePeople(@RequestBody People people) {
-        try {
-            // 驗證輸入
-            if (people == null || people.getName() == null || people.getName().trim().isEmpty()) {
-                return new ResponseEntity<>("Invalid input: name is required", HttpStatus.BAD_REQUEST);
-            }
-            
-            // 嘗試更新
-            People updatedPeople = peopleService.updatePerson(people);
-            return new ResponseEntity<>(updatedPeople, HttpStatus.OK);
-        } catch (IllegalArgumentException e) {
-            logger.error("Invalid input while updating person", e);
-            return new ResponseEntity<>("Person not found: " + e.getMessage(), HttpStatus.NOT_FOUND);
-        } catch (org.hibernate.StaleObjectStateException e) {
-            // 樂觀鎖定衝突，返回衝突狀態
-            logger.error("Concurrent update detected", e);
-            return new ResponseEntity<>("Concurrent update detected: " + e.getMessage(), HttpStatus.CONFLICT);
-        } catch (ObjectOptimisticLockingFailureException e) {
-            // 樂觀鎖定衝突，返回衝突狀態
-            logger.error("Optimistic locking failure detected", e);
-            return new ResponseEntity<>("Character data has been modified by another user, please reload and try again", HttpStatus.CONFLICT);
-        } catch (org.springframework.dao.DataIntegrityViolationException e) {
-            // 數據完整性違規，返回錯誤請求狀態
-            return new ResponseEntity<>("Data integrity violation: " + e.getMessage(), HttpStatus.BAD_REQUEST);
-        } catch (RuntimeException e) {
-            logger.error("Runtime exception during update", e);
-            return new ResponseEntity<>("Internal server error: " + e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
-        } catch (Exception e) {
-            logger.error("Unexpected error during update", e);
-            return new ResponseEntity<>("Unexpected error: " + e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
+    public Mono<ResponseEntity<Object>> updatePeople(@RequestBody People people) {
+        // 驗證輸入
+        if (people == null || people.getName() == null || people.getName().trim().isEmpty()) {
+            return Mono.just(ResponseEntity.badRequest().body("Invalid input: name is required"));
         }
+
+        // 嘗試更新
+        return peopleService.updatePerson(people)
+            .map(updatedPeople -> ResponseEntity.ok((Object) updatedPeople))
+            .onErrorResume(IllegalArgumentException.class, e -> {
+                logger.error("Invalid input while updating person", e);
+                return Mono.just(ResponseEntity.status(HttpStatus.NOT_FOUND).body((Object) ("Person not found: " + e.getMessage())));
+            })
+            .onErrorResume(org.springframework.dao.DataIntegrityViolationException.class, e ->
+                Mono.just(ResponseEntity.badRequest().body((Object) ("Data integrity violation: " + e.getMessage()))))
+            .onErrorResume(RuntimeException.class, e -> {
+                logger.error("Runtime exception during update", e);
+                return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body((Object) ("Internal server error: " + e.getMessage())));
+            })
+            .onErrorResume(Exception.class, e -> {
+                logger.error("Unexpected error during update", e);
+                return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body((Object) ("Unexpected error: " + e.getMessage())));
+            });
     }
 
     // 插入多個 (接收 JSON)
     @PostMapping("/insert-multiple")
-    public ResponseEntity<?> insertMultiplePeople(@RequestBody List<People> peopleList) {
-        try {
-            List<People> savedPeople = peopleService.saveAllPeople(peopleList);
-            return new ResponseEntity<>(savedPeople, HttpStatus.CREATED);
-        } catch (IllegalArgumentException e) {
-            return new ResponseEntity<>("Invalid input: " + e.getMessage(), HttpStatus.BAD_REQUEST);
-        } catch (RuntimeException e) {
-            return new ResponseEntity<>("Internal server error: " + e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
-        } catch (Exception e) {
-            return new ResponseEntity<>("Unexpected error: " + e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
-        }
+    public Mono<ResponseEntity<Object>> insertMultiplePeople(@RequestBody List<People> peopleList) {
+        return peopleService.saveAllPeople(peopleList)
+            .collectList()
+            .map(savedPeople -> ResponseEntity.status(HttpStatus.CREATED).body((Object) savedPeople))
+            .onErrorResume(IllegalArgumentException.class, e ->
+                Mono.just(ResponseEntity.badRequest().body((Object) ("Invalid input: " + e.getMessage()))))
+            .onErrorResume(RuntimeException.class, e ->
+                Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body((Object) ("Internal server error: " + e.getMessage()))))
+            .onErrorResume(Exception.class, e ->
+                Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body((Object) ("Unexpected error: " + e.getMessage()))));
     }
 
     @Operation(summary = "獲取所有角色", description = "獲取數據庫中所有角色的列表")
@@ -126,7 +111,7 @@ public class PeopleController {
         @ApiResponse(responseCode = "500", description = "服務器內部錯誤")
     })
     @PostMapping("/get-all")
-    public ResponseEntity<?> getAllPeople() {
+    public Mono<ResponseEntity<Object>> getAllPeople() {
         // 如果 RabbitMQ 啟用，使用異步處理
         if (asyncMessageService != null) {
             String requestId = asyncMessageService.sendPeopleGetAllRequest();
@@ -134,19 +119,17 @@ public class PeopleController {
             response.put("requestId", requestId);
             response.put("status", "processing");
             response.put("message", "角色列表獲取請求已提交，請稍後查詢結果");
-            return ResponseEntity.accepted().body(response);
+            return Mono.just(ResponseEntity.accepted().body(response));
         }
-        
+
         // 本地環境，同步處理
-        try {
-            // 使用優化的批量查詢方法，但保持相同的API介面
-            List<People> people = peopleService.getAllPeopleOptimized();
-            return new ResponseEntity<>(people, HttpStatus.OK);
-        } catch (RuntimeException e) {
-            return new ResponseEntity<>("Internal server error: " + e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
-        } catch (Exception e) {
-            return new ResponseEntity<>("Unexpected error: " + e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
-        }
+        return peopleService.getAllPeopleOptimized()
+            .collectList()
+            .map(people -> ResponseEntity.ok((Object) people))
+            .onErrorResume(RuntimeException.class, e ->
+                Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body((Object) ("Internal server error: " + e.getMessage()))))
+            .onErrorResume(Exception.class, e ->
+                Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body((Object) ("Unexpected error: " + e.getMessage()))));
     }
 
     @Operation(summary = "根據名稱獲取角色", description = "根據角色名稱獲取特定角色的信息")
@@ -157,19 +140,14 @@ public class PeopleController {
         @ApiResponse(responseCode = "500", description = "服務器內部錯誤")
     })
     @PostMapping("/get-by-name")
-    public ResponseEntity<?> getPeopleByName(@RequestBody PeopleNameRequestDTO request) {
-        try {
-            Optional<People> people = peopleService.getPeopleByName(request.getName());
-            if (people.isPresent()) {
-                return new ResponseEntity<>(people.get(), HttpStatus.OK);
-            } else {
-                return new ResponseEntity<>("Person not found", HttpStatus.NOT_FOUND);
-            }
-        } catch (RuntimeException e) {
-            return new ResponseEntity<>("Internal server error: " + e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
-        } catch (Exception e) {
-            return new ResponseEntity<>("Unexpected error: " + e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
-        }
+    public Mono<ResponseEntity<Object>> getPeopleByName(@RequestBody PeopleNameRequestDTO request) {
+        return peopleService.getPeopleByName(request.getName())
+            .map(people -> ResponseEntity.ok((Object) people))
+            .defaultIfEmpty(ResponseEntity.status(HttpStatus.NOT_FOUND).body((Object) "Person not found"))
+            .onErrorResume(RuntimeException.class, e ->
+                Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body((Object) ("Internal server error: " + e.getMessage()))))
+            .onErrorResume(Exception.class, e ->
+                Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body((Object) ("Unexpected error: " + e.getMessage()))));
     }
 
     @Operation(summary = "刪除所有角色", description = "刪除數據庫中所有角色")
@@ -178,15 +156,13 @@ public class PeopleController {
         @ApiResponse(responseCode = "500", description = "服務器內部錯誤")
     })
     @PostMapping("/delete-all")
-    public ResponseEntity<?> deleteAllPeople() {
-        try {
-            peopleService.deleteAllPeople();
-            return new ResponseEntity<>(HttpStatus.NO_CONTENT);
-        } catch (RuntimeException e) {
-            return new ResponseEntity<>("Internal server error: " + e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
-        } catch (Exception e) {
-            return new ResponseEntity<>("Unexpected error: " + e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
-        }
+    public Mono<ResponseEntity<Object>> deleteAllPeople() {
+        return peopleService.deleteAllPeople()
+            .then(Mono.just(ResponseEntity.noContent().build()))
+            .onErrorResume(RuntimeException.class, e ->
+                Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body((Object) ("Internal server error: " + e.getMessage()))))
+            .onErrorResume(Exception.class, e ->
+                Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body((Object) ("Unexpected error: " + e.getMessage()))));
     }
 
     @Operation(summary = "獲取所有角色名稱", description = "獲取數據庫中所有角色的名稱列表")
@@ -196,18 +172,17 @@ public class PeopleController {
         @ApiResponse(responseCode = "500", description = "服務器內部錯誤")
     })
     @GetMapping("/names")
-    public ResponseEntity<?> getAllPeopleNames() {
-        try {
-
-            
-            List<String> names = peopleService.getAllPeopleNames();
-            return new ResponseEntity<>(names, HttpStatus.OK);
-        } catch (RuntimeException e) {
-            logger.error("Runtime exception during getAllPeopleNames", e);
-            return new ResponseEntity<>("Internal server error: " + e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
-        } catch (Exception e) {
-            logger.error("Unexpected error during getAllPeopleNames", e);
-            return new ResponseEntity<>("Unexpected error: " + e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
-        }
+    public Mono<ResponseEntity<Object>> getAllPeopleNames() {
+        return peopleService.getAllPeopleNames()
+            .collectList()
+            .map(names -> ResponseEntity.ok((Object) names))
+            .onErrorResume(RuntimeException.class, e -> {
+                logger.error("Runtime exception during getAllPeopleNames", e);
+                return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body((Object) ("Internal server error: " + e.getMessage())));
+            })
+            .onErrorResume(Exception.class, e -> {
+                logger.error("Unexpected error during getAllPeopleNames", e);
+                return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body((Object) ("Unexpected error: " + e.getMessage())));
+            });
     }
 }

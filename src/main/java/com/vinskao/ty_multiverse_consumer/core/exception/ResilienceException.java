@@ -67,7 +67,7 @@ public class ResilienceException extends BusinessException {
      */
     public static ResilienceException rateLimitExceeded() {
         return new ResilienceException(
-            ErrorCode.RATE_LIMIT_EXCEEDED,
+            ErrorCode.INTERNAL_SERVER_ERROR,
             "1s",
             "RATE_LIMIT_EXCEEDED"
         );

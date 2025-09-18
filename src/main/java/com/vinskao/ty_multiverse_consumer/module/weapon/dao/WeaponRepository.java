@@ -1,34 +1,35 @@
 package com.vinskao.ty_multiverse_consumer.module.weapon.dao;
 
 import com.vinskao.ty_multiverse_consumer.module.weapon.domain.vo.Weapon;
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
-import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.r2dbc.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.data.repository.reactive.ReactiveCrudRepository;
 import org.springframework.stereotype.Repository;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import java.util.List;
-import java.util.Optional;
 
 @Repository
-public interface WeaponRepository extends JpaRepository<Weapon, String>, JpaSpecificationExecutor<Weapon> {
+public interface WeaponRepository extends ReactiveCrudRepository<Weapon, String> {
     
-    Optional<Weapon> findByName(String name);
+    Mono<Weapon> findByName(String name);
     
-    boolean existsByName(String name);
+    Mono<Boolean> existsByName(String name);
     
-    List<Weapon> findByOwner(String owner);
+    Flux<Weapon> findByOwner(String owner);
     
     // 新增：批量查詢多個擁有者的武器，避免N+1問題
-    @Query("SELECT w FROM Weapon w WHERE w.owner IN :owners")
-    List<Weapon> findByOwnersIn(@Param("owners") List<String> owners);
+    @Query("SELECT * FROM weapon WHERE owner IN (:owners)")
+    Flux<Weapon> findByOwnersIn(@Param("owners") List<String> owners);
     
-    List<Weapon> findByBaseDamageBetween(Integer minDamage, Integer maxDamage);
+    @Query("SELECT * FROM weapon WHERE base_damage BETWEEN :minDamage AND :maxDamage")
+    Flux<Weapon> findByBaseDamageBetween(@Param("minDamage") Integer minDamage, @Param("maxDamage") Integer maxDamage);
     
-    List<Weapon> findByAttributes(String attributes);
+    Flux<Weapon> findByAttributes(String attributes);
     
-    @Query(value = "SELECT * FROM weapon WHERE :attribute = ANY(bonus_attributes)", nativeQuery = true)
-    List<Weapon> findByBonusAttributesContaining(@Param("attribute") String attribute);
+    @Query("SELECT * FROM weapon WHERE :attribute = ANY(bonus_attributes)")
+    Flux<Weapon> findByBonusAttributesContaining(@Param("attribute") String attribute);
     
-    @Query(value = "SELECT * FROM weapon WHERE :attribute = ANY(state_attributes)", nativeQuery = true)
-    List<Weapon> findByStateAttributesContaining(@Param("attribute") String attribute);
+    @Query("SELECT * FROM weapon WHERE :attribute = ANY(state_attributes)")
+    Flux<Weapon> findByStateAttributesContaining(@Param("attribute") String attribute);
 } 

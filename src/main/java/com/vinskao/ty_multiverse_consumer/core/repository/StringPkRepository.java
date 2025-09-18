@@ -1,13 +1,11 @@
 package com.vinskao.ty_multiverse_consumer.core.repository;
 
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.repository.NoRepositoryBean;
 import org.springframework.lang.NonNull;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 import java.util.List;
-import java.util.Optional;
 
 /**
  * Repository implementation for entities that use String as their primary key.
@@ -17,55 +15,37 @@ import java.util.Optional;
  */
 @NoRepositoryBean
 public interface StringPkRepository<T> extends BaseRepository<T, String> {
-    
+
     /**
      * Find entity by ID
-     * 
+     *
      * @param id The ID to search for
-     * @return Optional containing the entity if found
+     * @return Mono containing the entity if found
      */
-    @NonNull Optional<T> findById(@NonNull String id);
-    
+    @NonNull Mono<T> findById(@NonNull String id);
+
     /**
      * Check if an entity exists by ID
-     * 
+     *
      * @param id The ID to check
-     * @return true if the entity exists, false otherwise
+     * @return Mono emitting true if the entity exists, false otherwise
      */
-    boolean existsById(@NonNull String id);
-    
+    Mono<Boolean> existsById(@NonNull String id);
+
     /**
      * Delete an entity by ID
-     * 
+     *
      * @param id The ID of the entity to delete
+     * @return Mono<Void>
      */
-    void deleteById(@NonNull String id);
-    
+    Mono<Void> deleteById(@NonNull String id);
+
     /**
      * Find all entities
-     * @return List of all entities
+     * @return Flux of all entities
      */
-    @NonNull List<T> findAll();
-    
-    /**
-     * Find all entities with pagination
-     * @param pageable The pagination information
-     * @return Page of entities
-     */
-    @NonNull Page<T> findAll(@NonNull Pageable pageable);
-    
-    /**
-     * Find all entities matching the specification
-     * @param spec The specification to match
-     * @return List of matching entities
-     */
-    @NonNull List<T> findAll(@NonNull Specification<T> spec);
-    
-    /**
-     * Find all entities matching the specification with pagination
-     * @param spec The specification to match
-     * @param pageable The pagination information
-     * @return Page of matching entities
-     */
-    @NonNull Page<T> findAll(@NonNull Specification<T> spec, @NonNull Pageable pageable);
+    @NonNull Flux<T> findAll();
+
+    // Note: R2DBC doesn't support Specification or Pageable, so removed those methods
+    // For pagination, use limit/offset in custom queries
 } 

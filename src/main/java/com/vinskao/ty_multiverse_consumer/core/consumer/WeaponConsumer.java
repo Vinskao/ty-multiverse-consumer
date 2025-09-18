@@ -28,6 +28,7 @@ import java.util.Optional;
  */
 @Component
 @ConditionalOnProperty(name = "spring.rabbitmq.enabled", havingValue = "true")
+@ConditionalOnProperty(name = "spring.rabbitmq.legacy.enabled", havingValue = "true", matchIfMissing = false)
 public class WeaponConsumer {
     
     private static final Logger logger = LoggerFactory.getLogger(WeaponConsumer.class);
@@ -55,7 +56,7 @@ public class WeaponConsumer {
             logger.info("開始獲取所有武器: requestId={}", requestId);
             
             // 處理請求
-            List<Weapon> weapons = weaponService.getAllWeapons();
+            List<Weapon> weapons = weaponService.getAllWeapons().collectList().block();
             
             logger.info("成功獲取所有武器: count={}, requestId={}", weapons.size(), requestId);
             
@@ -100,12 +101,11 @@ public class WeaponConsumer {
             logger.info("開始根據名稱獲取武器: name={}, requestId={}", name, requestId);
             
             // 處理請求
-            Optional<Weapon> weaponOptional = weaponService.getWeaponById(name);
-            
-            if (weaponOptional.isPresent()) {
-                Weapon weapon = weaponOptional.get();
+            Weapon weapon = weaponService.getWeaponById(name).block();
+
+            if (weapon != null) {
                 logger.info("成功獲取武器: name={}, requestId={}", name, requestId);
-                
+
                 // 發送成功結果給 Producer
                 asyncResultService.sendCompletedResult(
                     requestId,
@@ -113,7 +113,7 @@ public class WeaponConsumer {
                 );
             } else {
                 logger.warn("武器不存在: name={}, requestId={}", name, requestId);
-                
+
                 // 發送錯誤結果給 Producer
                 asyncResultService.sendFailedResult(
                     requestId,
@@ -156,7 +156,7 @@ public class WeaponConsumer {
             logger.info("開始根據擁有者獲取武器: owner={}, requestId={}", owner, requestId);
             
             // 處理請求
-            List<Weapon> weapons = weaponService.getWeaponsByOwner(owner);
+            List<Weapon> weapons = weaponService.getWeaponsByOwner(owner).collectList().block();
             
             logger.info("成功獲取武器: owner={}, count={}, requestId={}", owner, weapons.size(), requestId);
             
@@ -201,7 +201,7 @@ public class WeaponConsumer {
             logger.info("開始保存武器: name={}, requestId={}", weapon.getName(), requestId);
             
             // 處理請求
-            Weapon savedWeapon = weaponService.saveWeapon(weapon);
+            Weapon savedWeapon = weaponService.saveWeapon(weapon).block();
             
             logger.info("成功保存武器: name={}, requestId={}", savedWeapon.getName(), requestId);
             
@@ -335,7 +335,7 @@ public class WeaponConsumer {
             logger.info("開始檢查武器存在: name={}, requestId={}", name, requestId);
             
             // 處理請求
-            boolean exists = weaponService.weaponExists(name);
+            boolean exists = weaponService.weaponExists(name).block();
             
             logger.info("武器存在檢查完成: name={}, exists={}, requestId={}", name, exists, requestId);
             

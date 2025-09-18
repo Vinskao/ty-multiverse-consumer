@@ -2,7 +2,11 @@ package com.vinskao.ty_multiverse_consumer.module.weapon.domain.vo;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonIgnore;
-import jakarta.persistence.*;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.annotation.Transient;
+import org.springframework.data.annotation.Version;
+import org.springframework.data.relational.core.mapping.Table;
+import org.springframework.data.relational.core.mapping.Column;
 import java.time.LocalDateTime;
 import java.util.Objects;
 import java.util.List;
@@ -19,8 +23,7 @@ import lombok.NoArgsConstructor;
  * @version 1.0
  * @since 2024
  */
-@Entity
-@Table(name = "weapon")
+@Table("weapon")
 @Data
 @NoArgsConstructor
 public class Weapon {
@@ -30,7 +33,7 @@ public class Weapon {
      * <p>作為實體的唯一識別符</p>
      */
     @Id
-    @Column(name = "weapon", length = 255)
+    @Column("weapon")
     @JsonProperty("weapon")
     private String name;
 
@@ -38,42 +41,42 @@ public class Weapon {
      * 武器擁有者
      * <p>擁有此武器的人物名稱</p>
      */
-    @Column(name = "owner", length = 255)
+    @Column("owner")
     private String owner;
 
     /**
      * 武器屬性
      * <p>武器的基本屬性描述</p>
      */
-    @Column(name = "attributes", length = 255)
+    @Column("attributes")
     private String attributes;
 
     /**
      * 基礎傷害值
      * <p>武器的基礎攻擊傷害</p>
      */
-    @Column(name = "base_damage")
+    @Column("base_damage")
     private Integer baseDamage;
 
     /**
      * 加成傷害值
      * <p>武器的額外攻擊傷害</p>
      */
-    @Column(name = "bonus_damage")
+    @Column("bonus_damage")
     private Integer bonusDamage;
 
     /**
      * 加成屬性列表
      * <p>武器的額外屬性，以PostgreSQL數組形式儲存</p>
      */
-    @Column(name = "bonus_attributes", columnDefinition = "text[]")
+    @Column("bonus_attributes")
     private List<String> bonusAttributes;
 
     /**
      * 狀態屬性列表
      * <p>武器的狀態相關屬性，以PostgreSQL數組形式儲存</p>
      */
-    @Column(name = "state_attributes", columnDefinition = "text[]")
+    @Column("state_attributes")
     private List<String> stateAttributes;
 
     /**
@@ -88,14 +91,14 @@ public class Weapon {
      * 建立時間
      * <p>記錄建立此武器資料的時間戳記</p>
      */
-    @Column(name = "created_at", columnDefinition = "TIMESTAMP DEFAULT NOW()")
+    @Column("created_at")
     private LocalDateTime createdAt;
 
     /**
      * 更新時間
      * <p>記錄最後更新此武器資料的時間戳記</p>
      */
-    @Column(name = "updated_at", columnDefinition = "TIMESTAMP DEFAULT NOW()")
+    @Column("updated_at")
     private LocalDateTime updatedAt;
 
     /**
@@ -103,7 +106,6 @@ public class Weapon {
      * <p>用於防止並發更新衝突，每次更新時版本號會自動遞增</p>
      */
     @Version
-    @Column(name = "version")
     private Long version;
 
     /**

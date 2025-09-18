@@ -1,26 +1,6 @@
 server:
   port: 8081
-  servlet:
-    context-path: /ty_multiverse_consumer
-  tomcat:
-    # NIO 配置 - 非阻塞 I/O 優化
-    protocol: org.apache.coyote.http11.Http11NioProtocol
-    # 連接器配置
-    accept-count: 100
-    max-connections: 8192
-    max-http-header-size: 8192
-    max-swallow-size: 2097152
-    # 線程池配置
-    threads:
-      min-spare: 10
-      max: 200
-      max-queue-capacity: 100
-    # 連接超時配置
-    connection-timeout: 20000
-    keep-alive-timeout: 20000
-    # 壓縮配置
-    compression: on
-    "compressable-mime-types": text/html,text/xml,text/plain,text/css,text/javascript,application/javascript,application/json
+  # WebFlux 使用 Netty，不需要 Tomcat 配置
 
 spring:
   application:
@@ -28,43 +8,18 @@ spring:
   threads:
     virtual:
       enabled: true
-  # 數據庫配置 - PostgreSQL
+  # R2DBC 數據庫配置 - PostgreSQL
   config:
     import: classpath:env/@env@.properties
-  datasource:
-    driver-class-name: org.postgresql.Driver
-    url: '@SPRING_DATASOURCE_URL@'
+  r2dbc:
+    url: r2dbc:postgresql://@SPRING_DATASOURCE_HOST@:@SPRING_DATASOURCE_PORT@/@SPRING_DATASOURCE_DBNAME@
     username: '@SPRING_DATASOURCE_USERNAME@'
     password: '@SPRING_DATASOURCE_PASSWORD@'
-    # HikariCP 連接池配置 - 最大2個連接
-    hikari:
-      maximum-pool-size: 2
-      minimum-idle: 1
-      connection-timeout: 30000
-      idle-timeout: 30000
-      max-lifetime: 60000
-      leak-detection-threshold: 5000
-      connection-test-query: SELECT 1
-      validation-timeout: 5000
-      register-mbeans: true
-      pool-name: HikariPool-1
-      auto-commit: true 
-  jpa:
-    hibernate:
-      ddl-auto: update
-    show-sql: true
-    open-in-view: false
-    properties:
-      hibernate:
-        format_sql: true
-        dialect: org.hibernate.dialect.PostgreSQLDialect
-        hbm2ddl:
-          auto: update
-        connection:
-          release_mode: after_transaction
-        jdbc:
-          batch_size: 20
-          fetch_size: 20
+    pool:
+      enabled: true
+      initial-size: 1
+      max-size: 5  # 限制為個位數連線
+      max-idle-time: 30m
   rabbitmq:
     enabled: ${RABBITMQ_ENABLED:true}
     host: ${RABBITMQ_HOST:localhost}

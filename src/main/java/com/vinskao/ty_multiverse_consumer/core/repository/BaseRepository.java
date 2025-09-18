@@ -1,8 +1,7 @@
 package com.vinskao.ty_multiverse_consumer.core.repository;
 
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.repository.NoRepositoryBean;
+import org.springframework.data.repository.reactive.ReactiveCrudRepository;
 
 /**
  * Base repository interface that defines common methods for all repository types.
@@ -12,6 +11,7 @@ import org.springframework.data.repository.NoRepositoryBean;
  * @param <ID> The ID type
  */
 @NoRepositoryBean
-public interface BaseRepository<T, ID> extends JpaRepository<T, ID>, JpaSpecificationExecutor<T> {
+public interface BaseRepository<T, ID> extends ReactiveCrudRepository<T, ID> {
     // Common methods for all repository types can be added here
+    // Note: R2DBC doesn't support Specification, so removed JpaSpecificationExecutor
 } 

@@ -1,25 +1,16 @@
 package com.vinskao.ty_multiverse_consumer.module.people.dao;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
-
-import com.vinskao.ty_multiverse_consumer.core.repository.StringPkRepositoryImpl;
+import org.springframework.data.r2dbc.repository.config.EnableR2dbcRepositories;
 
 /**
- * Configuration for People repositories (已禁用)
- * 使用條件註解禁用此配置，保留配置備用
+ * Configuration for People repositories (R2DBC)
+ * 配置 R2DBC reactive repositories
  */
 @Configuration
-@ConditionalOnProperty(name = "spring.people-datasource.enabled", havingValue = "true")
-@EnableJpaRepositories(
-    basePackages = "com.vinskao.ty_multiverse_consumer.module.people.dao",
-    entityManagerFactoryRef = "peopleEntityManagerFactory",
-    transactionManagerRef = "peopleTransactionManager",
-    repositoryImplementationPostfix = "Impl",
-    repositoryBaseClass = StringPkRepositoryImpl.class
+@EnableR2dbcRepositories(
+    basePackages = "com.vinskao.ty_multiverse_consumer.module.people.dao"
 )
 public class PeopleRepositoryConfig {
-    // Spring Data JPA will automatically create repository implementations
-    // using our custom base classes for people datasource (已禁用)
+    // Spring Data R2DBC will automatically create repository implementations
 }

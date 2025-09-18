@@ -40,7 +40,7 @@ public class ConnectionRetryConfig {
         // 重試策略 - 更多重試次數
         Map<Class<? extends Throwable>, Boolean> retryableExceptions = new HashMap<>();
         retryableExceptions.put(org.springframework.transaction.CannotCreateTransactionException.class, true);
-        retryableExceptions.put(org.hibernate.exception.JDBCConnectionException.class, true);
+        retryableExceptions.put(io.r2dbc.spi.R2dbcException.class, true);
         retryableExceptions.put(java.sql.SQLTransientConnectionException.class, true);
 
         SimpleRetryPolicy retryPolicy = new SimpleRetryPolicy(10, retryableExceptions, true); // 增加到10次重試
