@@ -1,11 +1,538 @@
 # TY Multiverse Consumer
 
+## 📋 JPA/JDBC → R2DBC 遷移總覽表
+
+| 組件 | 原技術棧 | 新技術棧 | 主要變更點 | 影響範圍 |
+|-----|---------|---------|-----------|---------|
+| **依賴** | `spring-boot-starter-web`<br>`spring-boot-starter-data-jpa`<br>`spring-boot-starter-amqp` | `spring-boot-starter-webflux`<br>`spring-boot-starter-data-r2dbc`<br>`reactor-rabbitmq` | - WebMVC → WebFlux<br>- JPA → R2DBC<br>- Spring AMQP → Reactor RabbitMQ | `pom.xml` |
+| **實體類** | `@Entity` `@Table`<br>`@Id` `@Column`<br>`@Version` | `@Table` `@Id` `@Column`<br>`@Version` (Spring Data) | - 移除 `jakarta.persistence.*` 包<br>- 改用 `org.springframework.data.*`<br>- 移除 `initVersion()` 方法 | `*.java` (domain/vo) |
+| **Repository** | `JpaRepository`<br>`JpaSpecificationExecutor`<br>`@Query` (JPQL) | `ReactiveCrudRepository`<br>(無 Specification 支援)<br>`@Query` (原生SQL) | - `Mono<T>` / `Flux<T>` 返回類型<br>- 移除 Specification 查詢<br>- 使用原生 SQL 查詢 | `*.java` (dao) |
+| **Service** | 同步方法<br>`List<T>` 返回<br>阻塞 DB 呼叫 | `Mono<T>` / `Flux<T>`<br>非阻塞 DB 呼叫<br>Reactive 操作鏈 | - 所有方法返回 Reactive 類型<br>- 移除 `Optional<T>`<br>- 使用 `flatMap()` `map()` 等操作符 | `*.java` (service) |
+| **Controller** | `@RestController`<br>`ResponseEntity<T>`<br>同步處理 | `@RestController`<br>`Mono<ResponseEntity<T>>`<br>Reactive 處理 | - 回傳類型包裝為 `Mono<>`<br>- 錯誤處理改為 `onErrorResume()`<br>- 使用 `defaultIfEmpty()` | `*.java` (controller) |
+| **異常處理** | `@ControllerAdvice`<br>`@ExceptionHandler`<br>同步異常處理 | 責任鏈模式<br>`Mono<ResponseEntity>`<br>Reactive 異常處理 | - 實現責任鏈模式<br>- 異常處理器返回 `Mono<>`<br>- 鏈式錯誤處理 | `GlobalExceptionHandler.java`<br>+ Handler 類 |
+| **MQ 消費者** | `@RabbitListener`<br>同步消費<br>阻塞 DB 呼叫 | `Receiver.consumeManualAck`<br>Reactive 消費<br>非阻塞 DB 呼叫 | - 監聽方式完全改變<br>- 手動 ACK/NACK<br>- `flatMap(concurrency)` 控制 | `*.java` (consumer) |
+| **配置** | `DataSource`<br>`HikariCP`<br>JPA 配置 | `ConnectionFactory`<br>R2DBC 連線池<br>Reactive 配置 | - 連線池設定語法改變<br>- 移除 JPA 相關配置<br>- 添加 R2DBC URL 格式 | `application.yml`<br>`DatabaseConfig.java` |
+| **事務** | `@Transactional`<br>JPA 事務 | `@Transactional`<br>R2DBC 事務 | - 語法相同但底層實現不同<br>- Reactive 事務支援 | 保持不變 |
+| **健康檢查** | JDBC 健康檢查 | R2DBC 健康檢查 | - 連線檢查方式改變<br>- 使用 `ConnectionFactory` | `DatabaseConfig.java` |
+| **CORS** | `WebMvcConfigurer` | `CorsWebFilter` | - 配置類完全重寫<br>- 使用 Netty CORS 支援 | `CorsConfig.java` |
+
+## 🔍 各組件變更詳解與代碼示例
+
+### 1. 實體類變更示例
+```java
+// ❌ JPA 版本
+import jakarta.persistence.*;
+@Entity
+@Table(name = "people")
+public class People {
+    @Id
+    private String name;
+
+    @Column(name = "name_original")
+    private String nameOriginal;
+
+    @Version
+    private Long version;
+
+    // 需要手動初始化版本
+    @PrePersist
+    @PreUpdate
+    protected void initVersion() {
+        if (version == null) {
+            version = 0L;
+        }
+    }
+}
+
+// ✅ R2DBC 版本
+import org.springframework.data.annotation.*;
+import org.springframework.data.relational.core.mapping.*;
+
+@Table("people")
+public class People {
+    @Id
+    private String name;
+
+    @Column("name_original")
+    private String nameOriginal;
+
+    @Version
+    private Long version;
+    // 版本自動管理，無需手動初始化
+}
+```
+
+### 2. Repository 變更示例
+```java
+// ❌ JPA 版本
+@Repository
+public interface PeopleRepository extends JpaRepository<People, String>, JpaSpecificationExecutor<People> {
+    People findByName(String name);
+    boolean existsByName(String name);
+    List<People> findByNamesIn(List<String> names);
+    List<String> findAllNames();
+    List<People> findByAttributeContaining(String attribute);
+}
+
+// ✅ R2DBC 版本
+@Repository
+public interface PeopleRepository extends ReactiveCrudRepository<People, String> {
+    Mono<People> findByName(String name);
+    Mono<Boolean> existsByName(String name);
+    @Query("SELECT * FROM people WHERE name IN (:names)")
+    Flux<People> findByNamesIn(@Param("names") List<String> names);
+    @Query("SELECT name FROM people")
+    Flux<String> findAllNames();
+    @Query("SELECT * FROM people WHERE attributes IS NOT NULL AND attributes LIKE CONCAT('%', :attribute, '%')")
+    Flux<People> findByAttributeContaining(@Param("attribute") String attribute);
+}
+```
+
+### 3. Service 變更示例
+```java
+// ❌ 同步版本
+@Service
+public class PeopleService {
+    public List<People> getAllPeople() {
+        return peopleRepository.findAll();
+    }
+
+    public Optional<People> getPeopleByName(String name) {
+        return peopleRepository.findById(name);
+    }
+}
+
+// ✅ Reactive 版本
+@Service
+public class PeopleService {
+    public Flux<People> getAllPeople() {
+        return peopleRepository.findAll();
+    }
+
+    public Mono<People> getPeopleByName(String name) {
+        return peopleRepository.findById(name);
+    }
+}
+```
+
+### 4. Controller 變更示例
+```java
+// ❌ 同步版本
+@RestController
+@RequestMapping("/people")
+public class PeopleController {
+    @GetMapping
+    public ResponseEntity<List<People>> getAllPeople() {
+        try {
+            List<People> people = peopleService.getAllPeople();
+            return ResponseEntity.ok(people);
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+}
+
+// ✅ Reactive 版本
+@RestController
+@RequestMapping("/people")
+public class PeopleController {
+    @GetMapping
+    public Mono<ResponseEntity<List<People>>> getAllPeople() {
+        return peopleService.getAllPeople()
+            .collectList()
+            .map(people -> ResponseEntity.ok(people))
+            .onErrorResume(error -> Mono.just(
+                ResponseEntity.internalServerError().build()));
+    }
+}
+```
+
+### 5. MQ 消費者變更示例
+```java
+// ❌ Spring AMQP 版本
+@Component
+public class PeopleConsumer {
+    @RabbitListener(queues = "people.get-all.queue", concurrency = "2")
+    public void handleGetAllPeople(AsyncMessageDTO message) {
+        String requestId = message.getRequestId();
+        List<People> people = peopleService.getAllPeople().block(); // 阻塞！
+        asyncResultService.sendCompletedResult(requestId, people);
+    }
+}
+
+// ✅ Reactor RabbitMQ 版本
+@Component
+public class ReactivePeopleConsumer {
+    @PostConstruct
+    public void startConsumers() {
+        reactiveReceiver.consumeManualAck("people.get-all.queue", new ConsumeOptions().qos(2))
+            .flatMap(delivery -> parseMessage(delivery.getBody())
+                .flatMap(message -> {
+                    String requestId = message.getRequestId();
+                    return peopleService.getAllPeople()
+                        .collectList()
+                        .flatMap(people -> asyncResultService.sendCompletedResultReactive(requestId, people))
+                        .doOnSuccess(v -> delivery.ack())
+                        .onErrorResume(e -> asyncResultService.sendFailedResultReactive(requestId, e.getMessage())
+                            .doOnSuccess(v -> delivery.nack(false)));
+                }), 2) // 並發控制
+            .subscribe();
+    }
+}
+```
+
+### 6. 配置變更示例
+```yaml
+# ❌ JDBC/JPA 配置
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/peoplesystem
+    username: postgres
+    password: postgres123
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: true
+
+# ✅ R2DBC 配置
+spring:
+  r2dbc:
+    url: r2dbc:postgresql://localhost:5432/peoplesystem
+    username: postgres
+    password: postgres123
+    pool:
+      enabled: true
+      initial-size: 1
+      max-size: 5  # 關鍵限制
+```
+
 ## Overview
 - **Web 層**：Spring WebFlux（Netty）
 - **DB 層**：Spring Data R2DBC（PostgreSQL），連線池上限 5（遵循 K8s 限制）
 - **MQ 層**：Reactor RabbitMQ + Spring AMQP（雙棧支援），完全 reactive 消息處理
 - **OpenAPI**：springdoc-webflux-ui
 - **其他**：Virtual Threads 開啟（供一般任務池）
+- **核心模式**：Reactive Streams 觀察者模式（Publisher ↔ Subscriber ↔ Subscription）
+
+## 🎯 **Reactive Streams 觀察者模式架構**
+
+專案完全實現了 **Reactive Streams 規範** 的觀察者模式三大核心介面：
+
+| 介面 | 角色 | 專案實現 | 核心方法 |
+|-----|------|---------|---------|
+| **📢 Publisher<T>** | 數據生產者 | `Mono<T>`/`Flux<T>` | `subscribe(Subscriber)` |
+| **👂 Subscriber<T>** | 數據消費者 | `subscribe()` 調用 | `onSubscribe()` `onNext()` `onError()` `onComplete()` |
+| **🔗 Subscription** | 訂閱管理 | 框架自動管理 | `request(n)` `cancel()` |
+
+**核心流程**：`Publisher.subscribe(Subscriber)` → `Subscriber.onSubscribe(Subscription)` → `Subscription.request(n)` → `Subscriber.onNext(data)`
+
+## 🏗️ **WebFlux 架構工作流程圖**
+
+```mermaid
+graph TB
+    subgraph "🚀 外部請求"
+        Client[HTTP Client<br/>👂 Subscriber]
+    end
+
+    subgraph "🌐 Netty Web Server"
+        Netty[Netty<br/>非阻塞 I/O<br/>📢 Publisher]
+    end
+
+    subgraph "🎯 WebFlux Controller"
+        Controller[Controller<br/>Mono&lt;ResponseEntity&gt;<br/>📢 Publisher]
+    end
+
+    subgraph "⚙️ Service Layer"
+        Service[Service<br/>Reactive Methods<br/>📢 Publisher]
+    end
+
+    subgraph "💾 R2DBC Repository"
+        Repository[Repository<br/>ReactiveCrudRepository<br/>📢 Publisher]
+    end
+
+    subgraph "🐰 Reactor RabbitMQ"
+        RabbitMQ[Reactive Consumers<br/>Manual ACK/NACK<br/>👂 Subscriber]
+    end
+
+    subgraph "📨 Async Result Service"
+        AsyncService[AsyncResultService<br/>Reactive Sender<br/>📢 Publisher]
+    end
+
+    subgraph "🗄️ PostgreSQL"
+        DB[(PostgreSQL<br/>R2DBC<br/>👂 Subscriber)]
+    end
+
+    subgraph "📬 RabbitMQ Server"
+        MQ[(RabbitMQ<br/>Queues & Exchanges<br/>👂 Subscriber)]
+    end
+
+    %% Reactive Streams 觀察者模式流程
+    Client -.->|"subscribe()"| Netty
+    Netty -.->|"onSubscribe()"| Client
+    Netty -.->|"request(n)"| Client
+    Netty -.->|"onNext(data)"| Client
+
+    %% 請求流程
+    Client --> Netty
+    Netty --> Controller
+    Controller --> Service
+    Service --> Repository
+    Repository --> DB
+
+    %% 響應流程
+    DB --> Repository
+    Repository --> Service
+    Service --> Controller
+    Controller --> Netty
+    Netty --> Client
+
+    %% MQ 異步流程
+    Service --> AsyncService
+    AsyncService --> MQ
+    MQ --> RabbitMQ
+    RabbitMQ --> AsyncService
+
+    %% 樣式定義
+    classDef webLayer fill:#e1f5fe,stroke:#01579b,stroke-width:2px
+    classDef serviceLayer fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
+    classDef dataLayer fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
+    classDef mqLayer fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    classDef external fill:#fafafa,stroke:#424242,stroke-width:1px
+
+    class Client,Netty external
+    class Controller webLayer
+    class Service serviceLayer
+    class Repository dataLayer
+    class AsyncService mqLayer
+    class DB dataLayer
+    class MQ mqLayer
+    class RabbitMQ mqLayer
+```
+
+### 📋 **工作流程說明**
+
+#### **1. 同步 HTTP 請求流程**
+```
+HTTP Client → Netty → Controller → Service → Repository → PostgreSQL
+     ↑                                                ↓
+     └────────────────── Response ←───────────────────┘
+```
+
+#### **2. 異步 MQ 處理流程**
+```
+Producer → RabbitMQ Queue → Reactive Consumer → Service → DB
+             ↓
+AsyncResultService → RabbitMQ → Producer (回應)
+```
+
+#### **3. 關鍵技術特點**
+- **非阻塞 I/O**：Netty 處理所有 HTTP 請求
+- **Reactive Streams**：Mono/Flux 貫穿整個架構
+- **背壓控制**：從 MQ 到 DB 的流量控制
+- **事件驅動**：消息處理採用事件驅動模式
+
+### 🎯 **Reactive Streams 觀察者模式三大核心介面**
+
+專案完全實現了 **Reactive Streams 規範** 的觀察者模式，三大核心介面貫穿整個架構：
+
+#### **1. Publisher<T> 介面實現**
+```java
+// 📢 Publisher：負責數據生產和推送
+public interface Publisher<T> {
+    void subscribe(Subscriber<? super T> s);
+}
+
+// 專案中大量使用 Mono<T> 和 Flux<T>，它們都是 Publisher<T> 的實現：
+public Mono<ResponseEntity<Object>> getAllPeople()  // Controller 返回 Publisher
+public Flux<People> getAllPeople()                   // Service 返回 Publisher
+public Flux<People> findAll()                        // Repository 返回 Publisher
+```
+
+#### **2. Subscriber<T> 介面實現**
+```java
+// 👂 Subscriber：負責數據消費
+public interface Subscriber<T> {
+    void onSubscribe(Subscription s);  // 獲得訂閱時調用
+    void onNext(T t);                  // 接收數據時調用
+    void onError(Throwable t);         // 發生錯誤時調用
+    void onComplete();                 // 完成時調用
+}
+
+// 專案中使用 subscribe() 方法消費 Publisher：
+reactiveReceiver.consumeManualAck(queue, options)
+    .flatMap(this::handleMessage, 2)
+    .subscribe();  // 這裡調用 subscribe()
+```
+
+#### **3. Subscription 介面實現**
+```java
+// 🔗 Subscription：管理訂閱生命週期
+public interface Subscription {
+    void request(long n);  // 請求數據
+    void cancel();         // 取消訂閱
+}
+
+// 雖然代碼中沒有顯式創建 Subscription 物件，但在 Reactive Streams 規範中：
+// 當調用 subscribe() 時，框架會自動：
+// 1. 創建 Subscription 物件
+// 2. 調用 Subscriber.onSubscribe(Subscription)
+// 3. Subscriber 可以調用 subscription.request(n) 請求數據
+// 4. Publisher 通過 Subscriber.onNext(T) 推送數據
+```
+
+### 🔄 **專案中的完整觀察者模式流程**
+
+#### **HTTP 請求流程（同步）**：
+```
+1. HTTP Client (👂 Subscriber) → Netty (📢 Publisher)
+2. Netty.subscribe(Subscriber) → 觸發數據流
+3. Subscriber.onSubscribe(Subscription) → 獲得訂閱控制權
+4. Subscription.request(n) → 請求數據
+5. Subscriber.onNext(data) → 接收響應數據
+6. Subscriber.onComplete() → 請求完成
+```
+
+#### **MQ 異步處理流程**：
+```
+1. RabbitMQ Queue (📢 Publisher) → Reactive Consumer (👂 Subscriber)
+2. Consumer.subscribe() → 開始消費消息
+3. Subscriber.onSubscribe(Subscription) → 獲得消息流控制權
+4. Subscription.request(n) → 請求消息（prefetch）
+5. Subscriber.onNext(message) → 處理每條消息
+6. 手動 ACK/NACK → 精確控制消息確認
+```
+
+### 🎨 **核心設計理念實現**
+
+- **📢 Publisher**：`Mono<T>`/`Flux<T>` 負責數據生產和推送
+- **👂 Subscriber**：通過 `subscribe()` 方法訂閱數據流
+- **🔗 Subscription**：框架自動管理請求/取消生命週期
+- **🔄 背壓控制**：通過 `flatMap(concurrency)` 和 `qos(prefetch)` 實現流量控制
+- **⚡ 非阻塞**：整個鏈路都是事件驅動，非阻塞執行
+- **🛡️ 錯誤處理**：錯誤訊號通過 `onError()` 傳播，可被恢復
+
+### 📊 **詳細時序圖**
+
+#### **同步 HTTP 請求時序（觀察者模式）**
+```mermaid
+sequenceDiagram
+    participant Client as 👂 Subscriber<br/>HTTP Client
+    participant Netty as 📢 Publisher<br/>Netty
+    participant Controller as 📢 Publisher<br/>Controller
+    participant Service as 📢 Publisher<br/>Service
+    participant Repository as 📢 Publisher<br/>Repository
+    participant DB as 👂 Subscriber<br/>PostgreSQL
+
+    %% 觀察者模式核心流程
+    Client->>Netty: HTTP GET /api/people
+    Note over Client,Netty: 1. subscribe() - 訂閱數據流
+    Netty-->>Client: onSubscribe(Subscription)
+    Note over Client,Netty: 2. onSubscribe() - 獲得訂閱控制權
+    Client->>Netty: request(n)
+    Note over Client,Netty: 3. request(n) - 請求數據
+
+    Netty->>Controller: route request
+    Controller->>Service: getAllPeople()
+    Service->>Repository: findAll()
+    Repository->>DB: SELECT * FROM people
+
+    DB-->>Repository: onNext(data)
+    Note over DB,Repository: 4. onNext() - 推送數據
+    Repository-->>Service: Flux<People>
+    Service-->>Controller: Flux<People>
+    Controller-->>Netty: Mono<ResponseEntity>
+    Netty-->>Client: onNext(JSON)
+    Client-->>Client: onComplete()
+    Note over Client,DB: 整個流程都是事件驅動<br/>Publisher 推送數據給 Subscriber
+```
+
+#### **MQ 異步處理時序（觀察者模式）**
+```mermaid
+sequenceDiagram
+    participant Producer as 👂 Subscriber<br/>Producer
+    participant MQ as 📢 Publisher<br/>RabbitMQ
+    participant Consumer as 👂 Subscriber<br/>Reactive Consumer
+    participant Service as 📢 Publisher<br/>Service
+    participant DB as 👂 Subscriber<br/>PostgreSQL
+    participant AsyncService as 📢 Publisher<br/>AsyncResultService
+
+    Producer->>MQ: POST async request
+    MQ-->>Producer: onSubscribe(Subscription)
+    Producer->>MQ: request(1)
+
+    MQ->>Consumer: subscribe()
+    Note over MQ,Consumer: Consumer 訂閱 MQ Publisher
+    Consumer-->>MQ: onSubscribe(Subscription)
+    Consumer->>MQ: request(prefetch=2)
+    Note over Consumer,MQ: 設置背壓：最多同時處理2條消息
+
+    MQ->>Consumer: onNext(message)
+    Consumer->>Service: processPeople()
+    Service->>DB: INSERT/UPDATE
+    DB-->>Service: onNext(success)
+    Service->>AsyncService: sendCompletedResult()
+    AsyncService->>MQ: publish result
+    Consumer->>MQ: ACK
+    MQ-->>Producer: onNext(result)
+    Producer-->>Producer: onComplete()
+
+    Note over Consumer,AsyncService: 手動 ACK/NACK<br/>精確控制消息生命週期
+```
+
+#### **背壓控制示例（觀察者模式）**
+```mermaid
+sequenceDiagram
+    participant MQ as 📢 Publisher<br/>RabbitMQ
+    participant Consumer as 👂 Subscriber<br/>Consumer
+    participant Service as 📢 Publisher<br/>Service
+    participant DB as 👂 Subscriber<br/>DB
+
+    MQ->>Consumer: onNext(message 1)
+    Consumer->>Service: flatMap(concurrency=2)
+    Note over Consumer,Service: 背壓控制：最多2個並發操作
+    Service->>DB: connection 1
+    DB-->>Service: onNext(processing)
+
+    MQ->>Consumer: onNext(message 2)
+    Consumer->>Service: flatMap(concurrency=2)
+    Service->>DB: connection 2
+
+    Note over Consumer,DB: Subscription.request(n)<br/>控制數據請求速度<br/>確保 DB 連線池不被耗盡
+```
+
+### 🔄 **資料流圖（觀察者模式）**
+
+```mermaid
+flowchart TD
+    subgraph "觀察者模式數據流"
+        A[👂 HTTP Client<br/>Subscriber] -->|"subscribe()"| B{📢 Netty<br/>Publisher}
+        B -->|"onSubscribe() + request()"| A
+
+        B -->|"onNext(data)"| C[📢 WebFlux Controller<br/>Publisher]
+        C --> D[📢 Reactive Service<br/>Publisher]
+        D --> E[📢 Reactive Repository<br/>Publisher]
+        E -->|"onNext(result)"| F[👂 R2DBC<br/>Subscriber]
+        F -->|"onNext(data)"| E
+
+        G[📢 RabbitMQ Queue<br/>Publisher] -->|"onNext(message)"| H[👂 Reactive Consumer<br/>Subscriber]
+        H -->|"subscribe() + request()"| G
+        H -->|"ACK/NACK"| G
+
+        H --> D
+        D --> I[📢 AsyncResultService<br/>Publisher]
+        I -->|"onNext(result)"| G
+    end
+
+    subgraph "背壓控制"
+        J[R2DBC Connection Pool<br/>max-size=5] -.->|"限制 DB 連線"| F
+        K[MQ Prefetch<br/>qos=2] -.->|"限制消息並發"| H
+        L[FlatMap Concurrency<br/>concurrency=2] -.->|"限制業務處理"| D
+    end
+
+    style J fill:#ffcccc,stroke:#ff0000,stroke-width:2px
+    style K fill:#ccffcc,stroke:#00ff00,stroke-width:2px
+    style L fill:#ffffcc,stroke:#ffaa00,stroke-width:2px
+```
 
 ## 不變更承諾 ✅
 - **API 規格不動**：所有 REST 路徑、HTTP 方法、JSON 格式維持相同
@@ -135,10 +662,6 @@ spring:
       enabled: true
 ```
 
-## API 文件
-- **Swagger UI**: http://localhost:8081/ty_multiverse_consumer/swagger-ui.html
-- **OpenAPI Docs**: http://localhost:8081/ty_multiverse_consumer/v3/api-docs
-
 ## 架構優勢
 
 ### 🚀 性能提升
@@ -182,6 +705,197 @@ spring:
 - **背壓控制**：上游生產者根據下游消費能力自動調整速度
 - **資源共享**：少量線程處理大量併發請求，提高資源利用率
 
+### 🔍 **Mono<T>/Flux<T> vs JPA 底層設計對比**
+
+| 設計維度 | JPA (傳統) | Reactive (Mono/Flux) |
+|---------|-----------|-------------------|
+| **程式設計模型** | 同步阻塞 | 非同步非阻塞 |
+| **資料處理方式** | 一次性載入全部結果 | 流式處理，按需推送 |
+| **SQL 執行時機** | 立即執行，阻塞等待 | 非同步執行，結果通過回調返回 |
+| **記憶體使用** | 一次性載入所有數據到 List | 流式處理，記憶體使用可控 |
+| **錯誤處理** | 拋出異常 | 錯誤訊號通過串流傳播 |
+| **並發處理** | 線程阻塞等待 | 事件循環 + 背壓控制 |
+| **資源管理** | 線程池 + DB 連線池 | 事件循環 + 非阻塞連線 |
+| **資料庫互動** | 同步 JDBC | 非同步 R2DBC 協議 |
+
+#### **1. 程式設計模型差異**
+```java
+// ❌ JPA：同步阻塞
+@Repository
+public interface UserRepository extends JpaRepository<User, Long> {
+    List<User> findByStatus(String status); // 阻塞等待結果
+}
+
+// ✅ Reactive：非同步非阻塞
+@Repository
+public interface UserRepository extends ReactiveCrudRepository<User, Long> {
+    Flux<User> findByStatus(String status); // 立即返回，結果後續推送
+}
+```
+
+**關鍵差異：**
+- **JPA**：方法調用後，當前線程被阻塞直到數據庫返回結果
+- **Reactive**：方法立即返回，真正的數據庫操作在背後非同步執行
+
+#### **2. 資料處理方式差異**
+```java
+// ❌ JPA：一次性載入所有數據
+List<User> users = userRepository.findAll(); // 載入所有記錄到記憶體
+for (User user : users) {
+    process(user); // 處理完所有數據後才繼續
+}
+
+// ✅ Reactive：流式處理，按需消費
+Flux<User> userStream = userRepository.findAll();
+userStream
+    .filter(user -> user.getStatus().equals("ACTIVE"))
+    .take(10) // 只處理前10個
+    .subscribe(user -> process(user)); // 數據到達時立即處理
+```
+
+**關鍵差異：**
+- **JPA**：必須等待所有數據載入完成才能處理
+- **Reactive**：數據一到達就處理，可以中途停止，節省記憶體
+
+#### **3. SQL 執行時機差異**
+```java
+// ❌ JPA：同步執行
+@Transactional
+public void processUsers() {
+    List<User> users = userRepository.findByStatus("ACTIVE"); // SQL 立即執行，阻塞等待
+    for (User user : users) {
+        updateUser(user); // 處理數據
+    }
+    // 只有在所有數據處理完後，事務才結束
+}
+
+// ✅ Reactive：非同步執行
+@Transactional
+public Mono<Void> processUsersReactive() {
+    return userRepository.findByStatus("ACTIVE") // SQL 非同步執行
+        .flatMap(user -> updateUserReactive(user), 3) // 並發處理，每個操作都非阻塞
+        .then(); // 所有操作完成後，事務結束
+}
+```
+
+**關鍵差異：**
+- **JPA**：SQL 執行是同步的，整個事務期間線程被佔用
+- **Reactive**：SQL 執行是非同步的，線程可以處理其他請求
+
+#### **4. 記憶體使用差異**
+```java
+// ❌ JPA：一次性載入所有數據
+@RestController
+public class UserController {
+    @GetMapping("/users")
+    public List<User> getAllUsers() {
+        return userRepository.findAll(); // 載入所有用戶到記憶體！
+    }
+}
+
+// ✅ Reactive：流式處理，記憶體可控
+@RestController
+public class UserController {
+    @GetMapping("/users")
+    public Flux<User> getAllUsers() {
+        return userRepository.findAll() // 不載入到記憶體
+            .take(100) // 限制返回數量
+            .filter(user -> user.isActive()); // 服務端過濾
+    }
+}
+```
+
+**關鍵差異：**
+- **JPA**：大結果集會造成記憶體溢出
+- **Reactive**：通過 `take()`, `filter()` 等操作符控制記憶體使用
+
+#### **5. 錯誤處理差異**
+```java
+// ❌ JPA：異常拋出
+@Service
+public class UserService {
+    public List<User> getUsers() {
+        try {
+            return userRepository.findAll();
+        } catch (Exception e) {
+            throw new BusinessException("數據庫錯誤", e);
+        }
+    }
+}
+
+// ✅ Reactive：錯誤訊號傳播
+@Service
+public class UserService {
+    public Flux<User> getUsers() {
+        return userRepository.findAll()
+            .onErrorResume(e -> {
+                log.error("數據庫查詢失敗", e);
+                return Flux.empty(); // 返回空串流，而不是拋出異常
+            });
+    }
+}
+```
+
+**關鍵差異：**
+- **JPA**：異常會中斷整個請求處理
+- **Reactive**：錯誤成為串流的一部分，可以被恢復或轉換
+
+#### **6. 並發處理差異**
+```java
+// ❌ JPA：線程阻塞等待
+@RestController
+public class ApiController {
+    @GetMapping("/data")
+    public List<Data> getData() {
+        List<Data> result1 = service1.getData(); // 線程等待
+        List<Data> result2 = service2.getData(); // 線程等待
+        return combine(result1, result2);
+    }
+}
+
+// ✅ Reactive：背壓控制
+@RestController
+public class ApiController {
+    @GetMapping("/data")
+    public Mono<List<Data>> getData() {
+        return Mono.zip(
+            service1.getDataReactive(), // 非阻塞
+            service2.getDataReactive(), // 非阻塞
+            (result1, result2) -> combine(result1, result2) // 組合結果
+        );
+    }
+}
+```
+
+**關鍵差異：**
+- **JPA**：多個操作串聯執行，線程被阻塞
+- **Reactive**：多個操作並行執行，通過背壓控制資源使用
+
+#### **7. 資源管理差異**
+```yaml
+# ❌ JPA：線程池 + DB 連線池
+spring:
+  datasource:
+    hikari:
+      maximum-pool-size: 10  # 連線池大小
+server:
+  tomcat:
+    threads:
+      max: 200  # 線程池大小
+
+# ✅ Reactive：事件循環 + R2DBC 連線池
+spring:
+  r2dbc:
+    pool:
+      max-size: 5  # R2DBC 連線池（更少）
+server:
+  port: 8080  # Netty，無線程池配置
+```
+
+**關鍵差異：**
+- **JPA**：需要大量線程來處理阻塞操作
+- **Reactive**：少量線程 + 事件循環處理大量並發
+
 ### 🔰 Mono 與 Flux 基礎教學
 
 在進入 Reactive 架構設計之前，讓我們先掌握 Mono 與 Flux 的基本概念和寫法。
@@ -190,6 +904,51 @@ spring:
 
 **Mono<T>**：0-1 個元素的非同步結果，類似 Optional 的非同步版本
 
+### 🎯 **Mono 與 Flux 在 Reactor 中的角色**
+
+在 **Reactive Streams 規範** 中定義了：
+
+- **📢 Publisher**：生產資料（可有 0~N 筆資料）
+- **👂 Subscriber**：訂閱資料（消費 Publisher 發出的資料）
+
+在 **Reactor** 中的對應實現：
+
+#### **Mono<T>**
+- **Publisher 的一種實作**，表示 **最多只會發出 0 或 1 筆資料**
+- **適合場景**：「單一結果」，例如查一次資料庫回傳一筆紀錄
+- **比喻**：🍱 「單一快遞包裹」
+
+```java
+// 單一查詢：最多回傳一筆用戶資料
+Mono<User> findUserById(Long id) {
+    return userRepository.findById(id);
+}
+
+// 單一計算：異步計算結果
+Mono<Integer> calculateResult(int a, int b) {
+    return Mono.fromCallable(() -> a + b);
+}
+```
+
+#### **Flux<T>**
+- **Publisher 的另一種實作**，表示 **可以發出 0 到 N 筆資料**
+- **適合場景**：「多筆結果」，例如查詢清單、WebSocket 連續事件流
+- **比喻**：📦 「訂閱一個包裹訂閱盒子服務（每月送你多個）」
+
+```java
+// 多筆查詢：回傳用戶清單
+Flux<User> findAllUsers() {
+    return userRepository.findAll();
+}
+
+// 連續事件：WebSocket 消息流
+Flux<String> webSocketMessages(WebSocketSession session) {
+    return session.receive()
+        .map(message -> message.getPayloadAsText());
+}
+```
+
+#### **Mono 基本操作與創建方式**
 ```java
 // 創建 Mono
 Mono<String> mono = Mono.just("Hello");                    // 直接創建
@@ -205,28 +964,7 @@ mono.map(s -> s + " World")                                // 轉換： "Hello W
     .subscribe(System.out::println);                       // 訂閱並消費
 ```
 
-**常見使用場景：**
-```java
-// 單個數據庫查詢
-Mono<User> findUserById(Long id) {
-    return userRepository.findById(id);
-}
-
-// 單個外部 API 調用
-Mono<String> callExternalApi(String param) {
-    return webClient.get()
-        .uri("/api/data/" + param)
-        .retrieve()
-        .bodyToMono(String.class);
-}
-
-// 異步計算結果
-Mono<Integer> calculateAsync(int a, int b) {
-    return Mono.fromCallable(() -> a + b);
-}
-```
-
-#### 2. Flux 基礎操作
+#### **Flux 基本操作與創建方式**
 
 **Flux<T>**：0-N 個元素的非同步串流，類似 Stream 的非同步版本
 
@@ -245,7 +983,7 @@ flux.map(s -> s.toLowerCase())                             // 轉換每個元素
     .subscribe(list -> System.out.println(list));          // 訂閱
 ```
 
-**常見使用場景：**
+#### **Flux 常見使用場景**
 ```java
 // 多個數據庫查詢
 Flux<User> findAllUsers() {
@@ -265,6 +1003,23 @@ Flux<User> findUsersWithPagination(int page, int size) {
         .take(size);
 }
 ```
+
+### 🎯 **Mono vs Flux 選擇原則**
+
+| 場景 | 選擇 | 理由 | 範例 |
+|-----|------|------|------|
+| **單筆查詢** | Mono | 最多1筆資料 | `findById(id)` |
+| **單筆插入/更新** | Mono | 影響1筆資料 | `save(entity)` |
+| **存在性檢查** | Mono | Boolean結果 | `existsById(id)` |
+| **多筆查詢** | Flux | 0-N筆資料 | `findAll()` |
+| **批量操作** | Flux | 多筆處理 | `saveAll(entities)` |
+| **分頁查詢** | Flux | 有限筆資料 | `findWithPagination()` |
+| **事件流** | Flux | 連續資料 | WebSocket消息 |
+| **計數統計** | Mono | 單一數值 | `count()` |
+
+**總結**：
+- **Mono**：用於"單一結果"場景（0-1筆）
+- **Flux**：用於"多筆結果"或"連續流"場景（0-N筆）
 
 #### 3. Mono 與 Flux 互轉
 

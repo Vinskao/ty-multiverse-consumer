@@ -72,14 +72,8 @@ public class RabbitMQConfig {
     public static final String WEAPON_UPDATE_ATTRIBUTES_ROUTING_KEY = "weapon.update.attributes";
     public static final String WEAPON_UPDATE_BASE_DAMAGE_ROUTING_KEY = "weapon.update.base.damage";
     
-    // 回傳路由鍵
-    public static final String PEOPLE_GET_ALL_RESPONSE_ROUTING_KEY = "people.get-all.response";
-    public static final String PEOPLE_RESPONSE_ROUTING_KEY = "people.response";
-    public static final String WEAPON_RESPONSE_ROUTING_KEY = "weapon.response";
-    
-    // 回傳隊列名稱
-    public static final String PEOPLE_RESPONSE_QUEUE = "people.response.queue";
-    public static final String WEAPON_RESPONSE_QUEUE = "weapon.response.queue";
+    // 注意：回傳路由鍵和隊列已不再使用，改用 async-result 隊列
+    // 保留常量定義以防將來需要向後兼容
     
     // 異步結果隊列
     public static final String ASYNC_RESULT_QUEUE = "async-result";
@@ -143,22 +137,7 @@ public class RabbitMQConfig {
                 .build();
     }
     
-
-    
-    // 回傳隊列
-    @Bean
-    public Queue peopleResponseQueue() {
-        return QueueBuilder.durable(PEOPLE_RESPONSE_QUEUE)
-                .withArgument("x-message-ttl", 300000) // 5分鐘 TTL
-                .build();
-    }
-    
-    @Bean
-    public Queue weaponResponseQueue() {
-        return QueueBuilder.durable(WEAPON_RESPONSE_QUEUE)
-                .withArgument("x-message-ttl", 300000) // 5分鐘 TTL
-                .build();
-    }
+    // 注意：回傳隊列Bean已刪除，不再使用
     
     /**
      * 異步結果隊列
@@ -317,28 +296,7 @@ public class RabbitMQConfig {
     }
     
 
-    
-    // 綁定回傳隊列到回傳交換機
-    @Bean
-    public Binding peopleResponseBinding() {
-        return BindingBuilder.bind(peopleResponseQueue())
-                .to(peopleResponseExchange())
-                .with(PEOPLE_GET_ALL_RESPONSE_ROUTING_KEY);
-    }
-    
-    @Bean
-    public Binding peopleResponseBinding2() {
-        return BindingBuilder.bind(peopleResponseQueue())
-                .to(peopleResponseExchange())
-                .with(PEOPLE_RESPONSE_ROUTING_KEY);
-    }
-    
-    @Bean
-    public Binding weaponResponseBinding() {
-        return BindingBuilder.bind(weaponResponseQueue())
-                .to(weaponResponseExchange())
-                .with(WEAPON_RESPONSE_ROUTING_KEY);
-    }
+    // 注意：回傳隊列綁定已刪除，不再使用
     
     /**
      * 綁定異步結果隊列到交換機
