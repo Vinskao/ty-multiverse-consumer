@@ -1021,6 +1021,81 @@ Flux<User> findUsersWithPagination(int page, int size) {
 - **Mono**：用於"單一結果"場景（0-1筆）
 - **Flux**：用於"多筆結果"或"連續流"場景（0-N筆）
 
+### 🔥 **關鍵問題：Mono 需要自己訂閱嗎？**
+
+**答案：不用！Spring WebFlux 會自動處理訂閱！**
+
+#### **Reactive Streams 的基本原則**
+```java
+// ❌ Mono 本身不會執行！必須要有訂閱者
+Mono<String> mono = Mono.just("Hello");
+mono.subscribe(); // 必須手動訂閱才會執行
+
+// ✅ Spring WebFlux 自動訂閱
+@RestController
+public class MyController {
+    @GetMapping("/hello")
+    public Mono<String> hello() {
+        return Mono.just("Hello World"); // 框架自動訂閱！
+    }
+}
+```
+
+#### **為什麼 WebFlux 可以自動訂閱？**
+
+**框架內建的訂閱機制**：
+1. **HTTP 請求到達** → WebFlux 創建訂閱者
+2. **Controller 返回 Mono/Flux** → 框架自動調用 `subscribe()`
+3. **數據流開始執行** → 結果寫入 HTTP 響應
+4. **請求完成** → 自動清理資源
+
+```java
+// 實際上框架會這樣做：
+@GetMapping("/data")
+public Mono<String> getData() {
+    Mono<String> result = service.getData();
+    // 框架自動執行：
+    // result.subscribe(new HttpResponseSubscriber(response));
+    return result;
+}
+```
+
+#### **何時需要手動訂閱？**
+
+**只有在非 WebFlux 環境才需要手動訂閱**：
+```java
+// ❌ 單元測試中需要手動訂閱
+@Test
+void testMono() {
+    Mono<String> mono = service.getData();
+    // 需要手動訂閱來觸發執行
+    mono.subscribe();
+}
+
+// ✅ 批處理任務可能需要手動訂閱
+@Service
+public class BatchService {
+    public void processBatch() {
+        Flux<Item> items = repository.findAll();
+        // 在非 HTTP 環境需要手動訂閱
+        items.subscribe(this::processItem);
+    }
+}
+```
+
+#### **WebFlux 自動訂閱的時機點**
+
+| 組件 | 自動訂閱時機 | 訂閱者類型 |
+|-----|-------------|-----------|
+| **Controller** | HTTP請求處理時 | HttpResponseSubscriber |
+| **WebSocket** | 連接建立時 | WebSocketSubscriber |
+| **SSE** | 客户端訂閱時 | ServerSentEventSubscriber |
+
+**總結**：
+- **Spring WebFlux**：Controller 返回 Mono/Flux 會自動訂閱 ✅
+- **單元測試**：需要手動 `subscribe()` 或使用 `StepVerifier` ❌
+- **背景任務**：通常需要手動訂閱 ❌
+
 #### 3. Mono 與 Flux 互轉
 
 ```java

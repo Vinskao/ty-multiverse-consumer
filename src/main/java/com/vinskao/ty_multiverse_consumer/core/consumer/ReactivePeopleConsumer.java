@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vinskao.ty_multiverse_consumer.config.RabbitMQConfig;
 import com.vinskao.ty_multiverse_consumer.core.dto.AsyncMessageDTO;
 import com.vinskao.ty_multiverse_consumer.core.service.AsyncResultService;
-import com.vinskao.ty_multiverse_consumer.module.people.domain.vo.People;
 import com.vinskao.ty_multiverse_consumer.module.people.service.PeopleService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
