@@ -380,6 +380,437 @@ public interface Subscription {
 // 4. Publisher 通過 Subscriber.onNext(T) 推送數據
 ```
 
+## 🎯 **Reactive 架構完整流程深度解析**
+
+### 📊 **以 `getAllPeople` 為例的端到端流程分析**
+
+讓我們以一個具體的業務操作 `getAllPeople` 來深度解析 Reactive 架構的工作原理。這個方法展示了從 HTTP 請求到隊列處理再到數據庫操作的完整生命週期。
+
+#### **1. 資料結構與演算法深度解說**
+
+**核心資料結構：**
+```java
+// 📢 Publisher<T> - 數據生產者
+public interface Publisher<T> {
+    void subscribe(Subscriber<? super T> s);
+}
+
+// 👂 Subscriber<T> - 數據消費者
+public interface Subscriber<T> {
+    void onSubscribe(Subscription s);    // 訂閱成功
+    void onNext(T t);                   // 接收數據
+    void onError(Throwable t);          // 處理錯誤
+    void onComplete();                  // 完成處理
+}
+
+// 🔗 Subscription - 訂閱管理
+public interface Subscription {
+    void request(long n);               // 請求數據
+    void cancel();                      // 取消訂閱
+}
+```
+
+**核心演算法：請求-響應模式**
+
+```
+1. 消費者發起訂閱：Subscriber → Publisher.subscribe()
+2. 生產者創建訂閱：Publisher → Subscriber.onSubscribe(Subscription)
+3. 消費者請求數據：Subscriber → Subscription.request(n)
+4. 生產者推送數據：Publisher → Subscriber.onNext(data)
+5. 完成或出錯：Publisher → Subscriber.onComplete() / onError()
+```
+
+#### **2. 背壓控制演算法（Backpressure Algorithm）**
+
+**滑動窗口演算法：**
+```java
+// 偽代碼：背壓控制核心邏輯
+class BackpressureController {
+    private final int maxConcurrency = 2;    // 最大並發數
+    private final int bufferSize = 2;        // 緩衝區大小
+    private volatile int currentLoad = 0;    // 當前負載
+
+    public void request(long n) {
+        // 請求數據時檢查系統容量
+        if (currentLoad + n <= maxConcurrency + bufferSize) {
+            currentLoad += n;
+            upstream.request(n);  // 向上游請求
+        } else {
+            // 超過容量，應用背壓
+            upstream.request(maxConcurrency + bufferSize - currentLoad);
+        }
+    }
+
+    public void onNext(T item) {
+        currentLoad--;
+        downstream.onNext(item);
+    }
+}
+```
+
+**智能調節演算法：**
+```
+系統負載 = (活躍連線數 × 平均響應時間) / 最大容量
+調節因子 = max(0.1, 1 - 系統負載 × 0.8)
+實際並發 = 預設並發 × 調節因子
+```
+
+#### **3. 資源池管理演算法**
+
+**R2DBC 連線池演算法：**
+```java
+class ConnectionPoolManager {
+    private final Queue<Connection> available = new LinkedBlockingQueue<>();
+    private final Set<Connection> inUse = new HashSet<>();
+    private final int maxSize = 5;
+    private final AtomicInteger currentSize = new AtomicInteger(0);
+
+    public Mono<Connection> acquire() {
+        return Mono.fromCallable(() -> {
+            // 1. 嘗試從可用連線獲取
+            Connection conn = available.poll();
+            if (conn != null) {
+                inUse.add(conn);
+                return conn;
+            }
+
+            // 2. 檢查是否可以創建新連線
+            if (currentSize.get() < maxSize) {
+                conn = createNewConnection();
+                currentSize.incrementAndGet();
+                inUse.add(conn);
+                return conn;
+            }
+
+            // 3. 等待可用連線釋放
+            return waitForAvailableConnection();
+        });
+    }
+}
+```
+
+#### **4. 錯誤恢復演算法**
+
+**指數退避重試：**
+```java
+class RetryWithBackoff {
+    private final int maxRetries = 3;
+    private final Duration baseDelay = Duration.ofMillis(100);
+
+    public Mono<T> retry(Mono<T> source) {
+        return source.retryWhen(errors ->
+            errors.zipWith(Flux.range(1, maxRetries),
+                (error, attempt) -> {
+                    if (attempt >= maxRetries) {
+                        return Mono.error(error);
+                    }
+
+                    Duration delay = baseDelay.multipliedBy(1L << (attempt - 1));
+                    return Mono.delay(delay);
+                }
+            )
+        );
+    }
+}
+```
+
+#### **5. 完整流程時序分析 - getAllPeople 示例**
+
+**場景說明：** 客戶端調用 `/people/get-all` 接口獲取所有角色信息，系統通過異步隊列處理。
+
+**資料流轉換過程：**
+
+```
+原始請求：HTTP GET /people/get-all
+↓ (HTTP -> MQ 異步請求)
+MQ 消息：{"requestId": "req-123", "type": "people.get-all"}
+↓ (MQ -> Reactive Consumer)
+數據庫查詢：SELECT * FROM people
+↓ (DB -> Service -> Controller)
+最終響應：[{"name": "張三", "age": 25}, {"name": "李四", "age": 30}]
+```
+
+**具體實現路徑：**
+
+```java
+// 1. HTTP Controller - 請求入口
+@PostMapping("/get-all")
+public Mono<ResponseEntity<Object>> getAllPeople() {
+    // 發送異步請求到隊列
+    String requestId = asyncMessageService.sendPeopleGetAllRequest();
+    // 返回 202 Accepted，包含 requestId
+    return Mono.just(ResponseEntity.accepted().body(Map.of(
+        "requestId", requestId,
+        "status", "processing"
+    )));
+}
+
+// 2. 異步消息服務 - 隊列生產者
+public String sendPeopleGetAllRequest() {
+    String requestId = UUID.randomUUID().toString();
+    AsyncMessageDTO message = new AsyncMessageDTO(requestId, "people.get-all", null);
+
+    // 發送到 RabbitMQ 隊列
+    rabbitTemplate.convertAndSend("people.get-all.queue", message);
+    return requestId;
+}
+
+// 3. Reactive Consumer - 隊列消費者
+private Mono<Void> handleGetAllPeople(AcknowledgableDelivery delivery) {
+    return parseMessage(delivery.getBody())
+        .flatMap(message -> {
+            // 調用服務層 - 觸發 DB 操作
+            return peopleService.getAllPeopleOptimized()
+                .collectList()  // 收集所有結果
+                .flatMap(peopleList ->
+                    // 發送結果回異步服務
+                    asyncResultService.sendCompletedResultReactive(
+                        message.getRequestId(), peopleList
+                    )
+                )
+                .doOnSuccess(v -> delivery.ack())    // 手動確認
+                .onErrorResume(e ->
+                    asyncResultService.sendFailedResultReactive(
+                        message.getRequestId(), e.getMessage()
+                    ).doOnSuccess(v -> delivery.nack(false))
+                );
+        });
+}
+
+// 4. Service 層 - 業務邏輯
+@Transactional(readOnly = true)
+public Flux<People> getAllPeopleOptimized() {
+    return peopleRepository.findAll()  // 執行 DB 查詢
+        .doOnNext(people -> {
+            // 處理每個角色數據
+            if (people.getVersion() == null) {
+                people.setVersion(0L);
+            }
+        });
+}
+
+// 5. Repository 層 - 數據訪問
+public interface PeopleRepository extends ReactiveCrudRepository<People, String> {
+    @Query("SELECT * FROM people")
+    Flux<People> findAll();  // 返回非阻塞數據流
+}
+```
+
+**關鍵演算法步驟：**
+
+1. **請求轉換**：HTTP → MQ 消息（同步轉異步）
+2. **消息分發**：MQ → Reactive Consumer（事件驅動）
+3. **數據查詢**：R2DBC → PostgreSQL（非阻塞查詢）
+4. **結果收集**：Flux → List（流式處理）
+5. **響應推送**：MQ → HTTP Client（異步回調）
+
+#### **6. 背壓控制機制深度分析**
+
+**多層背壓協調：**
+
+```
+HTTP 請求頻率 ──┬─► Netty 事件循環 (maxConnections=1000)
+                 │
+                 ├─► MQ 消費速率 (prefetch=2)
+                 │
+                 ├─► Service 處理並發 (flatMap=2)
+                 │
+                 └─► R2DBC 連線池 (max-size=5)
+```
+
+**動態調節算法：**
+
+```java
+class AdaptiveBackpressureController {
+    private final int[] loadHistory = new int[10];
+    private int historyIndex = 0;
+    private final double smoothingFactor = 0.7;
+
+    public int calculateOptimalConcurrency() {
+        // 1. 計算當前系統負載
+        double currentLoad = calculateCurrentLoad();
+
+        // 2. 預測下一個時間窗口的負載
+        double predictedLoad = predictNextLoad(currentLoad);
+
+        // 3. 基於負載調整並發數
+        if (predictedLoad > 0.8) {
+            return Math.max(1, currentConcurrency - 1);
+        } else if (predictedLoad < 0.5) {
+            return Math.min(maxConcurrency, currentConcurrency + 1);
+        }
+
+        return currentConcurrency;
+    }
+
+    private double calculateCurrentLoad() {
+        // 監控指標：CPU使用率、記憶體使用率、DB連線池使用率
+        return (cpuUsage * 0.4 + memoryUsage * 0.3 + dbConnectionUsage * 0.3);
+    }
+}
+```
+
+#### **7. 完整流程圖 - getAllPeople 端到端分析**
+
+```mermaid
+graph TB
+    subgraph "🌐 HTTP 請求層"
+        Client[HTTP Client<br/>👂 Subscriber] --> Controller
+        Controller[PeopleController<br/>📢 Publisher] --> AsyncService
+        AsyncService[AsyncMessageService<br/>📢 Publisher]
+    end
+
+    subgraph "📨 消息隊列層"
+        AsyncService -->|"convertAndSend"| MQQueue[RabbitMQ Queue<br/>people.get-all.queue]
+        MQQueue -->|"consumeManualAck"| ReactiveConsumer
+        ReactiveConsumer[ReactivePeopleConsumer<br/>👂 Subscriber]
+    end
+
+    subgraph "⚙️ 業務邏輯層"
+        ReactiveConsumer -->|"peopleService.getAllPeopleOptimized()"| PeopleService
+        PeopleService[PeopleService<br/>📢 Publisher] -->|"peopleRepository.findAll()"| PeopleRepository
+        PeopleRepository[PeopleRepository<br/>📢 Publisher]
+    end
+
+    subgraph "💾 數據庫層"
+        PeopleRepository -->|"R2DBC 非阻塞查詢"| ConnectionPool[R2DBC Connection Pool<br/>max-size=5]
+        ConnectionPool -->|"SELECT * FROM people"| PostgreSQL[(PostgreSQL<br/>👂 Subscriber)]
+        PostgreSQL -->|"onNext(people)"| ConnectionPool
+    end
+
+    subgraph "📡 異步響應層"
+        ConnectionPool -->|"onNext(data)"| PeopleRepository
+        PeopleRepository -->|"collectList()"| PeopleService
+        PeopleService -->|"sendCompletedResultReactive()"| AsyncResultService
+        AsyncResultService[AsyncResultService<br/>📢 Publisher] -->|"publish result"| MQResultQueue[RabbitMQ Result Queue]
+        MQResultQueue -->|"onNext(result)"| Client
+    end
+
+    %% 背壓控制標註
+    subgraph "🔄 背壓控制機制"
+        Backpressure1[HTTP 層背壓<br/>maxConnections=1000] -.->|"限制請求速率"| Client
+        Backpressure2[MQ 層背壓<br/>prefetch=2] -.->|"限制消息消費"| MQQueue
+        Backpressure3[業務層背壓<br/>flatMap=2] -.->|"限制處理並發"| PeopleService
+        Backpressure4[DB 層背壓<br/>max-size=5] -.->|"限制連線使用"| ConnectionPool
+    end
+
+    %% 資料流標註
+    subgraph "📊 資料流轉換"
+        Flow1[HTTP Request<br/>GET /people/get-all] -.->|"1. 同步轉異步"| AsyncService
+        Flow2[MQ Message<br/>AsyncMessageDTO] -.->|"2. 消息分發"| ReactiveConsumer
+        Flow3[DB Query<br/>SELECT * FROM people] -.->|"3. 非阻塞查詢"| PostgreSQL
+        Flow4[Flux&lt;People&gt;<br/>流式數據] -.->|"4. 流式處理"| PeopleService
+        Flow5[Response<br/>List&lt;People&gt;] -.->|"5. 異步回調"| Client
+    end
+
+    %% 樣式定義
+    classDef httpLayer fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    classDef mqLayer fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef serviceLayer fill:#e8f5e8,stroke:#388e3c,stroke-width:2px
+    classDef dbLayer fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+    classDef asyncLayer fill:#fce4ec,stroke:#c2185b,stroke-width:2px
+    classDef controlLayer fill:#f5f5f5,stroke:#616161,stroke-width:1px
+
+    class Client,Controller,AsyncService httpLayer
+    class MQQueue,ReactiveConsumer mqLayer
+    class PeopleService,PeopleRepository serviceLayer
+    class ConnectionPool,PostgreSQL dbLayer
+    class AsyncResultService,MQResultQueue asyncLayer
+    class Backpressure1,Backpressure2,Backpressure3,Backpressure4,Flow1,Flow2,Flow3,Flow4,Flow5 controlLayer
+```
+
+**流程圖詳解：**
+
+1. **HTTP 請求層**：客戶端發起請求，Controller 立即返回 202 Accepted，異步發送 MQ 消息
+2. **消息隊列層**：Reactive Consumer 訂閱隊列，手動 ACK/NACK 控制消息生命週期
+3. **業務邏輯層**：Service 層處理業務邏輯，Repository 層執行數據查詢
+4. **數據庫層**：R2DBC 非阻塞查詢，連線池限制最大 5 個連線
+5. **異步響應層**：處理結果通過另一個 MQ 隊列推送給客戶端
+
+**背壓控制層**：各層協調控制流量，避免系統過載
+
+#### **8. 性能優化演算法深度解析**
+
+**記憶體優化策略：**
+```java
+// 傳統同步方式：一次性載入所有數據
+public List<People> getAllPeopleBlocking() {
+    List<People> allPeople = peopleRepository.findAll(); // 立即載入所有數據
+    return allPeople.stream()
+        .map(this::processPeople)  // 記憶體中處理
+        .collect(Collectors.toList());
+}
+
+// Reactive 方式：流式處理，記憶體可控
+public Flux<People> getAllPeopleReactive() {
+    return peopleRepository.findAll()  // 數據流式推送
+        .map(this::processPeople)      // 邊到達邊處理
+        .take(1000)                    // 限制處理數量
+        .buffer(100)                   // 分批處理，控制記憶體
+        .flatMap(this::batchProcess);  // 批量非阻塞處理
+}
+```
+
+**並發控制演算法：**
+```java
+class ConcurrencyOptimizer {
+    private final int cpuCores = Runtime.getRuntime().availableProcessors();
+    private final int dbMaxConnections = 5;
+
+    public int calculateOptimalConcurrency() {
+        // 1. 基於 CPU 核心數計算理論最大並發
+        int cpuBasedConcurrency = cpuCores * 2;
+
+        // 2. 基於 DB 連線池限制調整
+        int dbBasedConcurrency = dbMaxConnections - 1; // 保留1個連線緩衝
+
+        // 3. 基於記憶體可用性調整
+        long availableMemory = Runtime.getRuntime().maxMemory() - Runtime.getRuntime().totalMemory();
+        int memoryBasedConcurrency = (int) (availableMemory / (1024 * 1024 * 10)); // 假設每個請求10MB
+
+        // 4. 取最小值作為最終並發數
+        return Math.min(cpuBasedConcurrency,
+               Math.min(dbBasedConcurrency, memoryBasedConcurrency));
+    }
+}
+```
+
+**自適應負載均衡：**
+```java
+class AdaptiveLoadBalancer {
+    private final List<ServiceInstance> instances = new ArrayList<>();
+    private final Map<String, Double> instanceWeights = new ConcurrentHashMap<>();
+
+    public Mono<ServiceInstance> selectOptimalInstance() {
+        return Mono.fromCallable(() -> {
+            // 1. 收集各實例健康指標
+            Map<String, HealthMetrics> metrics = collectHealthMetrics();
+
+            // 2. 計算加權分數
+            Map<String, Double> scores = calculateWeightedScores(metrics);
+
+            // 3. 基於分數選擇實例
+            return selectByWeightedRandom(scores);
+        });
+    }
+
+    private Map<String, Double> calculateWeightedScores(Map<String, HealthMetrics> metrics) {
+        return metrics.entrySet().stream()
+            .collect(Collectors.toMap(
+                Map.Entry::getKey,
+                entry -> {
+                    HealthMetrics m = entry.getValue();
+                    // 權重計算：CPU使用率(20%) + 記憶體使用率(20%) + 響應時間(30%) + 活躍請求數(30%)
+                    return (1 - m.cpuUsage) * 0.2 +
+                           (1 - m.memoryUsage) * 0.2 +
+                           (1 / m.responseTime) * 0.3 +
+                           (1 / (m.activeRequests + 1)) * 0.3;
+                }
+            ));
+    }
+}
+```
+
 ### 🔄 **專案中的完整觀察者模式流程**
 
 #### **HTTP 請求流程（同步）**：
