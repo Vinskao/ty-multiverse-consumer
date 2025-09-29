@@ -1073,6 +1073,126 @@ spring:
 - **Sender/Receiver**：非阻塞消息發送/接收
 - **並發策略**：與 R2DBC 連線池協調（prefetch=3, 保留 2 個連線作緩衝）
 
+## 🧠 Redis 工作流程（Caching + 冪等性）
+
+本專案使用 Spring Data Redis Reactive（Lettuce）提供兩個核心能力：
+
+- **快取（Caching）**：降低 DB 壓力、加速回應
+- **冪等性（Idempotency）**：避免異步消息被重複處理
+
+### 1) 配置來源
+
+`application.yml`
+
+```yaml
+spring:
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_CUSTOM_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 2s
+```
+
+`RedisConfig` 提供 Reactive 連線工廠（`ReactiveRedisConnectionFactory`）與 `ReactiveStringRedisTemplate`，並標記為 `@Primary` 以避免與自動配置衝突。
+
+### 2) 鍵設計與 TTL
+
+- **快取鍵**
+  - `people:getAll` → TTL 60 秒
+  - `people:getByName:{name}` → TTL 60 秒
+- **冪等鍵**
+  - `idempotent:people:getAll:{requestId}` → TTL 5 分鐘
+
+設計原則：業務語義前綴 + 操作名 + 參數，TTL 與資料新鮮度/重放風險相匹配。
+
+### 3) 具體流程
+
+- 檔案：`core/consumer/ReactivePeopleConsumer.java`
+- 服務：`service/RedisService.java`（`get`/`set`/`setIfAbsent`）
+
+#### a. People Get-All（含快取 + 冪等）
+
+```text
+收到 MQ 訊息(requestId)
+│
+├─ 先嘗試設置冪等鍵 setIfAbsent("idempotent:people:getAll:{requestId}") → TTL=5m
+│    ├─ 成功(true)：表示首次處理 → 進入查庫(queryFlow)
+│    └─ 失敗(false)：表示重複請求 → 優先嘗試快取(cachedFlow)
+│
+├─ cachedFlow：讀取 key=people:getAll
+│    ├─ 命中 → 直接把快取結果回傳給發起者
+│    └─ 未命中 → 落到 queryFlow
+│
+└─ queryFlow：查 DB → 寫入快取 people:getAll（TTL=60s）→ 回傳結果
+```
+
+關鍵片段（語意化）：
+
+```java
+// 冪等鍵（5 分鐘）
+String idempotentKey = "idempotent:people:getAll:" + requestId;
+// 快取鍵（60 秒）
+String cacheKey = "people:getAll";
+
+// 嘗試冪等鎖 → false 代表重複請求，走快取優先
+redisService.setIfAbsent(idempotentKey, "1", Duration.ofMinutes(5))
+    .flatMap(set -> set ? Mono.empty() : Mono.just(false))
+    .flatMap(alreadyProcessed -> alreadyProcessed.equals(Boolean.FALSE) ? cachedFlow : queryFlow)
+    .switchIfEmpty(cachedFlow.switchIfEmpty(queryFlow));
+```
+
+#### b. People Get-By-Name（僅快取）
+
+```text
+快取鍵 people:getByName:{name} → TTL 60 秒
+命中 → 直接回傳；未命中 → 查 DB 並回寫快取
+```
+
+### 4) 為何冪等 TTL 設為 5 分鐘？
+
+- 給異步處理充分時間（消息重試、網路抖動）
+- 5 分鐘內的重複請求大多屬異常/重放
+- 避免 Redis 殘留過多冪等鍵
+
+### 5) 失效與降級行為
+
+- `RedisService` 以 `@Autowired(required = false)` 注入
+- 若 Redis 未連線或未配置：
+  - 快取邏輯自動跳過（直接查 DB）
+  - 冪等鎖跳過（仍可依賴 MQ 手動 ACK/NACK 與重試邏輯）
+- 整體不影響系統可用性，只是性能與重放保護降低
+
+### 6) 常用操作
+
+```java
+// 寫入（可選 TTL）
+redisService.set(key, value, Duration.ofSeconds(60));
+
+// 讀取
+redisService.get(key);
+
+// 冪等等鎖（僅當不存在時寫入）
+redisService.setIfAbsent(key, "1", Duration.ofMinutes(5));
+```
+
+### 7) 本地測試建議
+
+- 啟動 Redis：
+  - Docker：`docker run -p 6379:6379 --name dev-redis -d redis:7`
+  - Windows：使用 Redis Windows 版本或 WSL
+- 設定環境變數：`REDIS_HOST`, `REDIS_CUSTOM_PORT`, `REDIS_PASSWORD`
+- 驗證鍵：
+  - `redis-cli KEYS people:*`
+  - `redis-cli TTL people:getAll`
+  - `redis-cli GET idempotent:people:getAll:{requestId}`
+
+### 8) 故障排查
+
+- 啟動失敗提示多個 Redis beans：確保僅使用 Reactive 版本的 `ReactiveRedisOperations`
+- 快取無效：檢查 TTL、鍵名是否一致、Redis 是否連線
+- 冪等不生效：確認 requestId 真的唯一且傳遞正確
+
 ## 啟動與運行
 
 ### 本地執行
