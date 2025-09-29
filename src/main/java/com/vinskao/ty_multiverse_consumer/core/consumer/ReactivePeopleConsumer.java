@@ -14,6 +14,8 @@ import reactor.core.publisher.Mono;
 import reactor.rabbitmq.AcknowledgableDelivery;
 import reactor.rabbitmq.ConsumeOptions;
 import reactor.rabbitmq.Receiver;
+import com.vinskao.ty_multiverse_consumer.service.RedisService;
+import java.time.Duration;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -45,6 +47,9 @@ public class ReactivePeopleConsumer {
 
     @Autowired
     private AsyncResultService asyncResultService;
+
+    @Autowired(required = false)
+    private RedisService redisService;
 
     /**
      * 啟動所有 reactive 消費者
@@ -119,15 +124,37 @@ public class ReactivePeopleConsumer {
                 String requestId = message.getRequestId();
                 logger.info("📝 處理請求: requestId={}", requestId);
                 
-                // 完全 reactive 的資料庫查詢
-                return peopleService.getAllPeopleOptimized()
+                // 嘗試快取與冪等
+                String idempotentKey = "idempotent:people:getAll:" + requestId;
+                String cacheKey = "people:getAll";
+
+                Mono<Void> cachedFlow = (redisService == null ? Mono.<String>empty() : redisService.get(cacheKey))
+                    .flatMap(cached -> {
+                        if (cached != null) {
+                            logger.info("🗃️ 命中快取: {}", cacheKey);
+                            return asyncResultService.sendCompletedResultReactive(requestId, cached);
+                        }
+                        return Mono.empty();
+                    });
+
+                Mono<Void> queryFlow = peopleService.getAllPeopleOptimized()
                     .collectList()
                     .flatMap(peopleList -> {
                         logger.info("✅ 查詢完成: 共 {} 個角色, requestId={}", peopleList.size(), requestId);
-                        
-                        // 發送成功結果 - 這裡需要確保 asyncResultService 也是 reactive 的
-                        return asyncResultService.sendCompletedResultReactive(requestId, peopleList);
+                        Mono<Void> cacheWrite = (redisService == null)
+                                ? Mono.empty()
+                                : Mono.fromCallable(() -> objectMapper.writeValueAsString(peopleList))
+                                    .flatMap(json -> redisService.set(cacheKey, json, Duration.ofSeconds(60)).then());
+                        Mono<Boolean> idemSet = (redisService == null)
+                                ? Mono.just(true)
+                                : redisService.setIfAbsent(idempotentKey, "1", Duration.ofMinutes(5));
+                        return idemSet.then(cacheWrite).then(asyncResultService.sendCompletedResultReactive(requestId, peopleList));
                     })
+                    .onErrorResume(e -> asyncResultService.sendFailedResultReactive(requestId, "獲取角色列表失敗: " + e.getMessage()));
+
+                return (redisService == null ? Mono.empty() : redisService.setIfAbsent(idempotentKey, "1", Duration.ofMinutes(5)).flatMap(set -> set ? Mono.empty() : Mono.just(false)))
+                    .flatMap(alreadyProcessed -> alreadyProcessed.equals(Boolean.FALSE) ? cachedFlow : queryFlow)
+                    .switchIfEmpty(cachedFlow.switchIfEmpty(queryFlow))
                     .doOnSuccess(v -> {
                         logger.info("🎉 People Get-All 處理完成: requestId={}", requestId);
                         delivery.ack(); // 手動 ACK
@@ -164,17 +191,33 @@ public class ReactivePeopleConsumer {
                 String name = (String) message.getPayload();
                 logger.info("📝 處理請求: name={}, requestId={}", name, requestId);
                 
-                return peopleService.getPeopleByName(name)
+                String cacheKey = "people:getByName:" + name;
+                Mono<Void> cachedFlow = (redisService == null ? Mono.<String>empty() : redisService.get(cacheKey))
+                    .flatMap(cached -> {
+                        if (cached != null) {
+                            logger.info("🗃️ 命中快取: {}", cacheKey);
+                            return asyncResultService.sendCompletedResultReactive(requestId, cached);
+                        }
+                        return Mono.empty();
+                    });
+
+                Mono<Void> queryFlow = peopleService.getPeopleByName(name)
                     .flatMap(people -> {
                         logger.info("✅ 查詢成功: name={}, requestId={}", name, requestId);
-                        return asyncResultService.sendCompletedResultReactive(requestId, people);
+                        Mono<Void> cacheWrite = (redisService == null)
+                                ? Mono.empty()
+                                : Mono.fromCallable(() -> objectMapper.writeValueAsString(people))
+                                    .flatMap(json -> redisService.set(cacheKey, json, Duration.ofSeconds(60)).then());
+                        return cacheWrite.then(asyncResultService.sendCompletedResultReactive(requestId, people));
                     })
                     .switchIfEmpty(
                         Mono.defer(() -> {
                             logger.warn("⚠️ 角色不存在: name={}, requestId={}", name, requestId);
                             return asyncResultService.sendFailedResultReactive(requestId, "角色不存在: " + name);
                         })
-                    )
+                    );
+
+                return cachedFlow.switchIfEmpty(queryFlow)
                     .doOnSuccess(v -> {
                         logger.info("🎉 People Get-By-Name 處理完成: requestId={}", requestId);
                         delivery.ack();
