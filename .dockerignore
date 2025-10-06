@@ -1,0 +1,36 @@
+# Git
+.git
+.gitignore
+
+# IDE
+.idea
+.vscode
+*.iml
+
+# Maven
+target/
+!target/ty-multiverse-consumer.jar
+.m2/
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Jenkins
+Jenkinsfile
+k8s/
+
+# Documentation
+README.md
+*.md
+
+# Test files
+src/test/
+
+# Temporary files
+*.tmp
+*.temp

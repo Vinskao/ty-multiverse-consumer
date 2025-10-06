@@ -1,0 +1,65 @@
+server:
+  port: 8081
+  # WebFlux 使用 Netty，不需要 Tomcat 配置
+
+spring:
+  application:
+    name: ty_multiverse_consumer
+  threads:
+    virtual:
+      enabled: true
+  # R2DBC 數據庫配置 - PostgreSQL
+  config:
+    import: optional:classpath:env/${env:local}.properties
+  r2dbc:
+    url: r2dbc:postgresql://${SPRING_DATASOURCE_HOST}:${SPRING_DATASOURCE_PORT}/${SPRING_DATASOURCE_DBNAME}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+    pool:
+      enabled: true
+      initial-size: 1
+      max-size: 5  # 限制為個位數連線
+      max-idle-time: 30m
+  rabbitmq:
+    enabled: ${RABBITMQ_ENABLED:true}
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:admin}
+    password: ${RABBITMQ_PASSWORD:admin123}
+    virtual-host: ${RABBITMQ_VIRTUAL_HOST:/}
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_CUSTOM_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 2s
+
+# 日誌配置
+logging:
+  level:
+    root: @LOGGING_LEVEL@
+    org.springframework.web: @LOGGING_LEVEL_SPRINGFRAMEWORK@
+    org.springframework.amqp: @LOGGING_LEVEL_SPRINGFRAMEWORK@
+    com.vinskao.ty_multiverse_consumer: @LOGGING_LEVEL@
+
+# Actuator 配置
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,rabbit,beans
+  endpoint:
+    health:
+      show-details: always
+
+# Swagger文檔配置
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+  api-docs:
+    path: /v3/api-docs
+    enabled: true
+  packages-to-scan: com.vinskao.ty_multiverse_consumer
+  paths-to-match: /**
