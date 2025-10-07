@@ -41,6 +41,12 @@ public class AsyncMessageDTO {
      */
     private Long timestamp;
     
+    /**
+     * 消息來源
+     * 例如：producer, consumer
+     */
+    private String source;
+    
     // 手動添加 getter 方法以確保編譯成功
     public String getRequestId() {
         return requestId;
@@ -83,8 +89,11 @@ public class AsyncMessageDTO {
         this.timestamp = timestamp;
     }
 
-    // 添加缺失的 getter 方法
     public String getSource() {
-        return "producer"; // 默認返回 producer，因為這是來自 Producer 的消息
+        return source;
+    }
+
+    public void setSource(String source) {
+        this.source = source;
     }
 }
