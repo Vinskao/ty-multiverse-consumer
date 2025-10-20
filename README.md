@@ -1,5 +1,45 @@
 # TY Multiverse Consumer
 
+## 🔧 開發環境設定
+
+### 依賴管理架構
+
+本專案使用 **統一的依賴管理架構**，透過 Maven 從本地或遠端倉庫引用共用程式庫 `ty-multiverse-common`。
+
+#### 架構說明
+- **統一 common 模組**：所有共用程式碼集中在單一專案中管理
+- **自動依賴解析**：Maven 自動處理模組間的依賴關係
+- **版本同步**：所有專案使用相同版本的 common 模組
+
+#### 開發環境設定
+```bash
+# 確保 common 模組已建置並安裝到本地倉庫
+cd ../ty-multiverse-common
+mvn clean install
+
+# 檢查依賴關係
+mvn dependency:tree | grep ty-multiverse-common
+```
+
+#### Common 模組更新流程
+```bash
+# 1. 在 common 目錄中進行開發
+cd ../ty-multiverse-common
+git checkout -b feature/new-enhancement
+# ... 修改程式碼 ...
+
+# 2. 建置並安裝到本地倉庫
+mvn clean install
+
+# 3. 提交並推送變更
+git add .
+git commit -m "Add new enhancement"
+git push origin feature/new-enhancement
+
+# 4. 其他專案會自動使用更新後的版本
+mvn clean compile  # 自動使用新版本的 common
+```
+
 ## 📋 JPA/JDBC → R2DBC 遷移總覽表
 
 | 組件 | 原技術棧 | 新技術棧 | 主要變更點 | 影響範圍 |
@@ -15,6 +55,101 @@
 | **事務** | `@Transactional`<br>JPA 事務 | `@Transactional`<br>R2DBC 事務 | - 語法相同但底層實現不同<br>- Reactive 事務支援 | 保持不變 |
 | **健康檢查** | JDBC 健康檢查 | R2DBC 健康檢查 | - 連線檢查方式改變<br>- 使用 `ConnectionFactory` | `DatabaseConfig.java` |
 | **CORS** | `WebMvcConfigurer` | `CorsWebFilter` | - 配置類完全重寫<br>- 使用 Netty CORS 支援 | `CorsConfig.java` |
+
+## 🛡️ Consumer Middleware/Filter 架構
+
+### WebFlux 響應式中間件設計
+
+Consumer 作為 RabbitMQ 訊息消費者，使用 WebFlux 技術棧，實現完全非阻塞的訊息處理。
+
+#### 1. WebFilter 層級
+
+**CorsWebFilter** - 響應式 CORS 處理：
+```java
+@Configuration
+public class CorsConfig {
+    @Bean
+    public CorsWebFilter corsWebFilter() {
+        CorsConfiguration corsConfig = new CorsConfiguration();
+        corsConfig.addAllowedOrigin("http://localhost:3000");
+        corsConfig.addAllowedMethod("*");
+        corsConfig.addAllowedHeader("*");
+        corsConfig.setAllowCredentials(true);
+
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", corsConfig);
+
+        return new CorsWebFilter(source);
+    }
+}
+```
+- **位置**：WebFlux 的 WebFilter 鏈
+- **職責**：處理跨域請求（即使 Consumer 主要處理 MQ 訊息）
+
+#### 2. Reactive Exception Handlers
+
+**責任鏈模式的異常處理器**：
+```java
+@Component
+public class BusinessApiExceptionHandler extends BaseExceptionHandler {
+    @Override
+    public Mono<ResponseEntity<ErrorResponse>> handle(Throwable ex) {
+        if (ex instanceof BusinessException) {
+            return Mono.just(ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(new ErrorResponse("業務邏輯錯誤", ex.getMessage())));
+        }
+        return Mono.empty(); // 傳遞給下一個處理器
+    }
+}
+
+// 統一的異常處理鏈
+@Service
+public class GlobalExceptionHandler {
+    private final List<BaseExceptionHandler> handlers;
+
+    public Mono<ResponseEntity<ErrorResponse>> handleException(Throwable ex) {
+        return Flux.fromIterable(handlers)
+            .flatMap(handler -> handler.handle(ex))
+            .next() // 取第一個匹配的處理結果
+            .switchIfEmpty(Mono.just(ResponseEntity
+                .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(new ErrorResponse("系統錯誤", "未知錯誤"))));
+    }
+}
+```
+- **位置**：Reactive 異常處理鏈
+- **職責**：使用責任鏈模式處理不同類型的異常
+
+### Consumer vs 其他模組中間件對比
+
+| 層級 | Consumer (WebFlux) | Backend (WebMVC) | Gateway (Gateway) |
+|------|-------------------|------------------|-------------------|
+| **風格** | 響應式 (Reactive) | 阻塞式 (Blocking) | 響應式 (Reactive) |
+| **Filter** | WebFilter | Servlet Filter | GlobalFilter |
+| **異常處理** | 責任鏈模式 | @ControllerAdvice | Gateway 異常處理 |
+| **CORS** | CorsWebFilter | Spring Security | Gateway CORS |
+| **MQ** | Reactor RabbitMQ | Spring AMQP | 無 |
+
+### 架構優勢
+
+1. **完全非阻塞**：所有操作都是響應式的，不會阻塞執行緒
+2. **高併發處理**：能夠處理大量並發的 MQ 訊息
+3. **資源效率**：使用更少的執行緒處理更多請求
+4. **故障恢復**：Reactive 程式設計提供更好的錯誤處理
+5. **背壓控制**：自動處理生產者和消費者的速度差異
+
+### 監控指標
+
+- **MQ 消費指標**: 訊息處理成功/失敗率
+- **處理延遲**: 從接收到處理完成的時間
+- **錯誤統計**: 各類異常的發生頻率
+- **資源使用**: 記憶體和 CPU 使用情況
+
+**相關文件：**
+- `src/main/java/tw/com/tymconsumer/config/CorsConfig.java`
+- `src/main/java/tw/com/tymconsumer/exception/GlobalExceptionHandler.java`
+- `src/main/java/tw/com/tymconsumer/exception/BaseExceptionHandler.java`
 
 ## 🔍 各組件變更詳解與代碼示例
 
@@ -210,7 +345,6 @@ spring:
 - **Web 層**：Spring WebFlux（Netty）
 - **DB 層**：Spring Data R2DBC（PostgreSQL），連線池上限 5（遵循 K8s 限制）
 - **MQ 層**：Reactor RabbitMQ + Spring AMQP（雙棧支援），完全 reactive 消息處理
-- **OpenAPI**：springdoc-webflux-ui
 - **其他**：Virtual Threads 開啟（供一般任務池）
 - **核心模式**：Reactive Streams 觀察者模式（Publisher ↔ Subscriber ↔ Subscription）
 
@@ -1230,8 +1364,28 @@ spring:
 ### 🎯 運維友善
 - **連線數控制**：嚴格遵循 K8s 環境限制
 - **監控就緒**：內建指標記錄點，易於集成 Micrometer
-- **日誌清晰**：結構化日誌，便於除錯
+- **日誌清晰**：統一請求響應日誌記錄，所有 Controller 自動記錄請求和響應
 - **健康檢查**：R2DBC 連線健康監控
+
+### 📊 統一日誌記錄系統
+
+本專案使用統一的請求響應日誌記錄系統，自動記錄所有 Controller 方法的請求和響應：
+
+**日誌輸出範例：**
+```
+🚀 [abc12345] GET /people/list - Started
+📝 [abc12345] Request parameters: [page=1, size=10]
+📋 [abc12345] Request headers: User-Agent: Mozilla/5.0..., Content-Type: application/json
+✅ [abc12345] GET /people/list - Completed in 150ms
+📤 [abc12345] Response: {"data":[{"id":1,"name":"John"}],"total":1}
+```
+
+**功能特點：**
+- **自動化記錄**：無需在每個 Controller 中手動添加日誌程式碼
+- **請求追蹤**：每個請求都有唯一 ID，方便問題追蹤
+- **效能監控**：自動記錄響應時間，幫助發現效能問題
+- **安全性**：自動過濾敏感資訊，避免洩露機密資料
+- **可配置**：通過日誌級別控制記錄詳情程度
 
 ## 下一步建議
 

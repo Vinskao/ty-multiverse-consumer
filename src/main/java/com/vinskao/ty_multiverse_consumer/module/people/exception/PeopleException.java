@@ -1,7 +1,7 @@
 package com.vinskao.ty_multiverse_consumer.module.people.exception;
 
-import com.vinskao.ty_multiverse_consumer.core.exception.BusinessException;
-import com.vinskao.ty_multiverse_consumer.core.exception.ErrorCode;
+import tw.com.ty.common.exception.BusinessException;
+import tw.com.ty.common.exception.ErrorCode;
 
 /**
  * People 模組的特定異常類

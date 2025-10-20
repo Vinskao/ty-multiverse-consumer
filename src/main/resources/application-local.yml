@@ -37,13 +37,3 @@ logging:
     org.springframework: INFO
     com.vinskao.ty_multiverse_consumer: DEBUG
 
-# Swagger文檔配置
-springdoc:
-  swagger-ui:
-    path: /swagger-ui.html
-    enabled: true
-  api-docs:
-    path: /v3/api-docs
-    enabled: true
-  packages-to-scan: com.vinskao.ty_multiverse_consumer
-  paths-to-match: /**

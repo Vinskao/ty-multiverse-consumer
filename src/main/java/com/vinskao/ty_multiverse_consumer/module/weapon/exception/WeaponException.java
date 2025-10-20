@@ -1,7 +1,7 @@
 package com.vinskao.ty_multiverse_consumer.module.weapon.exception;
 
-import com.vinskao.ty_multiverse_consumer.core.exception.BusinessException;
-import com.vinskao.ty_multiverse_consumer.core.exception.ErrorCode;
+import tw.com.ty.common.exception.BusinessException;
+import tw.com.ty.common.exception.ErrorCode;
 
 /**
  * Weapon 模組的特定異常類

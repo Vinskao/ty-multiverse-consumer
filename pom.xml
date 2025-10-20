@@ -16,9 +16,37 @@
     
     <properties>
         <java.version>21</java.version>
+        <env>local</env>
     </properties>
     
     <dependencies>
+        <!-- Common module for shared error handling and AOP logging -->
+        <dependency>
+            <groupId>tw.com.ty</groupId>
+            <artifactId>ty-multiverse-common</artifactId>
+            <version>1.1</version>
+        </dependency>
+
+        <!-- AOP support for common module logging aspect -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-aop</artifactId>
+        </dependency>
+
+        <!-- AspectJ runtime for AOP support -->
+        <dependency>
+            <groupId>org.aspectj</groupId>
+            <artifactId>aspectjrt</artifactId>
+            <version>1.9.20</version>
+        </dependency>
+
+        <!-- Swagger for API documentation -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-webflux-ui</artifactId>
+            <version>1.7.0</version>
+        </dependency>
+
         <!-- WebFlux for reactive web -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -89,12 +117,6 @@
             <artifactId>lombok</artifactId>
             <optional>true</optional>
         </dependency>
-        <!-- SpringDoc OpenAPI for WebFlux -->
-        <dependency>
-            <groupId>org.springdoc</groupId>
-            <artifactId>springdoc-openapi-starter-webflux-ui</artifactId>
-            <version>2.6.0</version>
-        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
@@ -104,7 +126,24 @@
             <artifactId>spring-boot-starter-validation</artifactId>
         </dependency>
     </dependencies>
-    
+
+    <!-- GitHub Packages 發布配置 -->
+    <distributionManagement>
+        <repository>
+            <id>github</id>
+            <name>GitHub Packages</name>
+            <url>https://maven.pkg.github.com/Vinskao/ty-multiverse-consumer</url>
+        </repository>
+    </distributionManagement>
+
+    <repositories>
+        <repository>
+            <id>github</id>
+            <name>GitHub Packages</name>
+            <url>https://maven.pkg.github.com/Vinskao/ty-multiverse-common</url>
+        </repository>
+    </repositories>
+
     <build>
         <filters>
             <filter>src/main/resources/env/${env}.properties</filter>
@@ -187,6 +226,12 @@
     </build>
     
     <profiles>
+        <profile>
+            <id>github</id>
+            <properties>
+                <!-- GitHub Packages deployment profile -->
+            </properties>
+        </profile>
         <profile>
             <id>platform</id>
             <properties>
