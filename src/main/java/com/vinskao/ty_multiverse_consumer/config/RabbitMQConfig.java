@@ -46,6 +46,9 @@ public class RabbitMQConfig {
     public static final String WEAPON_UPDATE_ATTRIBUTES_QUEUE = "weapon-update-attributes";
     public static final String WEAPON_UPDATE_BASE_DAMAGE_QUEUE = "weapon-update-base-damage";
 
+    // Deckofcards 隊列名稱
+    public static final String DECKOFCARDS_QUEUE = "deckofcards";
+
     // 交換機名稱
     public static final String MAIN_EXCHANGE = "tymb-exchange";
     public static final String PEOPLE_RESPONSE_EXCHANGE = "people-response";
@@ -380,6 +383,19 @@ public class RabbitMQConfig {
         return BindingBuilder.bind(weaponUpdateBaseDamageQueue())
                 .to(mainExchange())
                 .with(WEAPON_UPDATE_BASE_DAMAGE_ROUTING_KEY);
+    }
+
+    // 綁定 Deckofcards 隊列到交換機
+    @Bean
+    public Queue deckofcardsQueue() {
+        return QueueBuilder.durable(DECKOFCARDS_QUEUE).build();
+    }
+
+    @Bean
+    public Binding deckofcardsBinding() {
+        return BindingBuilder.bind(deckofcardsQueue())
+                .to(mainExchange())
+                .with("deckofcards");
     }
 
     // 配置消息轉換器
