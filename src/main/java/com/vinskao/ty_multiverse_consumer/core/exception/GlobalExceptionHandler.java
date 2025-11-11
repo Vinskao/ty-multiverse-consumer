@@ -1,9 +1,9 @@
 package com.vinskao.ty_multiverse_consumer.core.exception;
 
 import tw.com.ty.common.exception.BusinessException;
-import tw.com.ty.common.exception.ErrorCode;
-import tw.com.ty.common.exception.ErrorResponse;
 import tw.com.ty.common.exception.UnifiedErrorConverter;
+import tw.com.ty.common.response.ErrorCode;
+import tw.com.ty.common.response.ErrorResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
