@@ -1,27 +1,38 @@
 package com.vinskao.ty_multiverse_consumer.core.dto;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import java.time.Instant;
 
 /**
  * 異步結果消息 DTO
- * 
+ *
  * 用於 Consumer 向 Producer 發送處理結果
- * 
+ * 與 Producer 應用保持一致的消息格式
+ *
  * @author TY Backend Team
  * @version 1.0
  * @since 2024
  */
 public class AsyncResultMessage {
-    
+
+    @JsonProperty("requestId")
     private String requestId;
+
+    @JsonProperty("status")
     private String status; // "completed", "failed"
+
+    @JsonProperty("data")
     private Object data;
+
+    @JsonProperty("error")
     private String error;
-    
+
+    @JsonProperty("timestamp")
     @JsonFormat(shape = JsonFormat.Shape.STRING)
     private String timestamp;
-    
+
+    @JsonProperty("source")
     private String source; // "consumer"
     
     // 默認構造函數

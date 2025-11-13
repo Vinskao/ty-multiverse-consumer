@@ -1,5 +1,6 @@
 package com.vinskao.ty_multiverse_consumer.core.config;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.cors.CorsConfiguration;
@@ -10,11 +11,14 @@ import java.util.Arrays;
 @Configuration
 public class CorsConfig {
 
+    @Value("${FRONTEND_URL:http://localhost:4321}")
+    private String frontendUrl;
+
     @Bean
     public CorsWebFilter corsWebFilter() {
         CorsConfiguration corsConfig = new CorsConfiguration();
         corsConfig.setAllowedOrigins(Arrays.asList(
-            "http://localhost:4321",
+            frontendUrl,
             "https://peoplesystem.tatdvsonorth.com"
         ));
         corsConfig.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));

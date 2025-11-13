@@ -96,10 +96,12 @@ public class AsyncResultService {
             logger.info("  - 路由鍵: async.result");
 
             try {
+                // 直接發送對象，讓 RabbitTemplate 的 MessageConverter 自動序列化
+                // 避免雙重序列化問題（messageJson 已經是字符串，再次序列化會導致雙重編碼）
                 rabbitTemplate.convertAndSend(
                     "tymb-exchange",    // 硬編碼以確保與 Producer 一致
                     "async.result",      // 硬編碼以確保與 Producer 一致
-                    messageJson
+                    resultMessage       // 直接發送對象，而非手動序列化的字符串
                 );
 
                 logger.info("✅ 成功發送異步結果消息: requestId={}, status={}, source={}",

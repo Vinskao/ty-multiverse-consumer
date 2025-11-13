@@ -5,6 +5,7 @@ import io.swagger.v3.oas.models.info.Contact;
 import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.info.License;
 import io.swagger.v3.oas.models.servers.Server;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.task.TaskExecutor;
@@ -24,6 +25,9 @@ import java.util.List;
 @Configuration
 public class SwaggerConfig {
 
+    @Value("${CONSUMER_SWAGGER_URL:http://localhost:8081}")
+    private String consumerSwaggerUrl;
+
     @Bean
     public OpenAPI customOpenAPI() {
         return new OpenAPI()
@@ -40,7 +44,7 @@ public class SwaggerConfig {
                                 .url("https://opensource.org/licenses/MIT")))
                 .servers(List.of(
                         new Server()
-                                .url("http://localhost:8081/ty_multiverse_consumer")
+                                .url(consumerSwaggerUrl + "/ty_multiverse_consumer")
                                 .description("本地開發環境"),
                         new Server()
                                 .url("https://api.ty.com/ty_multiverse_consumer")

@@ -188,4 +188,126 @@ public class PeopleConsumer {
             }
         }
     }
+
+    /**
+     * 監聽 People 更新請求
+     */
+    @RabbitListener(queues = "people-update", concurrency = "2")
+    public void handleUpdatePerson(String messageJson) {
+        try {
+            logger.info("收到更新角色請求: {}", messageJson);
+
+            AsyncMessageDTO message = objectMapper.readValue(messageJson, AsyncMessageDTO.class);
+            String requestId = message.getRequestId();
+            Object payload = message.getPayload();
+
+            logger.info("開始更新角色: requestId={}, payload={}", requestId, payload);
+
+            // 將 payload 轉換為 People 對象
+            People person = objectMapper.convertValue(payload, People.class);
+
+            // 處理請求
+            People updatedPerson = peopleService.updatePerson(person).block();
+
+            logger.info("成功更新角色: requestId={}, name={}", requestId, updatedPerson.getName());
+
+            // 發送成功結果給 Producer
+            asyncResultService.sendCompletedResult(requestId, updatedPerson);
+
+        } catch (Exception e) {
+            logger.error("處理更新角色請求失敗: {}", e.getMessage(), e);
+
+            // 嘗試解析請求ID
+            try {
+                AsyncMessageDTO message = objectMapper.readValue(messageJson, AsyncMessageDTO.class);
+                String requestId = message.getRequestId();
+
+                // 發送錯誤結果給 Producer
+                asyncResultService.sendFailedResult(requestId, "更新角色失敗: " + e.getMessage());
+
+            } catch (Exception parseError) {
+                logger.error("無法解析請求ID，無法發送錯誤回應: {}", parseError.getMessage());
+            }
+        }
+    }
+
+    /**
+     * 監聽 People Get Names 請求
+     */
+    @RabbitListener(queues = "people-get-names", concurrency = "2")
+    public void handleGetPeopleNames(String messageJson) {
+        try {
+            logger.info("收到獲取角色名稱請求: {}", messageJson);
+
+            AsyncMessageDTO message = objectMapper.readValue(messageJson, AsyncMessageDTO.class);
+            String requestId = message.getRequestId();
+
+            logger.info("開始獲取角色名稱列表: requestId={}", requestId);
+
+            // 處理請求 - 獲取所有角色名稱
+            List<String> namesList = peopleService.getAllPeopleNames().collectList().block();
+
+            logger.info("成功獲取角色名稱列表: requestId={}, count={}", requestId, namesList.size());
+
+            // 發送成功結果給 Producer
+            asyncResultService.sendCompletedResult(requestId, namesList);
+
+        } catch (Exception e) {
+            logger.error("處理獲取角色名稱請求失敗: {}", e.getMessage(), e);
+
+            // 嘗試解析請求ID
+            try {
+                AsyncMessageDTO message = objectMapper.readValue(messageJson, AsyncMessageDTO.class);
+                String requestId = message.getRequestId();
+
+                // 發送錯誤結果給 Producer
+                asyncResultService.sendFailedResult(requestId, "獲取角色名稱失敗: " + e.getMessage());
+
+            } catch (Exception parseError) {
+                logger.error("無法解析請求ID，無法發送錯誤回應: {}", parseError.getMessage());
+            }
+        }
+    }
+
+    /**
+     * 監聽 People Insert 請求
+     */
+    @RabbitListener(queues = "people-insert", concurrency = "2")
+    public void handleInsertPerson(String messageJson) {
+        try {
+            logger.info("收到新增角色請求: {}", messageJson);
+
+            AsyncMessageDTO message = objectMapper.readValue(messageJson, AsyncMessageDTO.class);
+            String requestId = message.getRequestId();
+            Object payload = message.getPayload();
+
+            logger.info("開始新增角色: requestId={}, payload={}", requestId, payload);
+
+            // 將 payload 轉換為 People 對象
+            People person = objectMapper.convertValue(payload, People.class);
+
+            // 處理請求
+            People savedPerson = peopleService.insertPerson(person).block();
+
+            logger.info("成功新增角色: requestId={}, name={}", requestId, savedPerson.getName());
+
+            // 發送成功結果給 Producer
+            asyncResultService.sendCompletedResult(requestId, savedPerson);
+
+        } catch (Exception e) {
+            logger.error("處理新增角色請求失敗: {}", e.getMessage(), e);
+
+            // 嘗試解析請求ID
+            try {
+                AsyncMessageDTO message = objectMapper.readValue(messageJson, AsyncMessageDTO.class);
+                String requestId = message.getRequestId();
+
+                // 發送錯誤結果給 Producer
+                asyncResultService.sendFailedResult(requestId, "新增角色失敗: " + e.getMessage());
+
+            } catch (Exception parseError) {
+                logger.error("無法解析請求ID，無法發送錯誤回應: {}", parseError.getMessage());
+            }
+        }
+    }
 }

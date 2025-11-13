@@ -30,6 +30,7 @@ public class RabbitMQConfig {
     public static final String PEOPLE_INSERT_MULTIPLE_QUEUE = "people-insert-multiple";
     public static final String PEOPLE_GET_ALL_QUEUE = "people-get-all";
     public static final String PEOPLE_GET_BY_NAME_QUEUE = "people-get-by-name";
+    public static final String PEOPLE_GET_NAMES_QUEUE = "people-get-names";
     public static final String PEOPLE_DELETE_QUEUE = "people-delete";
     public static final String PEOPLE_DELETE_ALL_QUEUE = "people-delete-all";
     public static final String PEOPLE_DAMAGE_CALCULATION_QUEUE = "people-damage-calculation";
@@ -60,6 +61,7 @@ public class RabbitMQConfig {
     public static final String PEOPLE_INSERT_MULTIPLE_ROUTING_KEY = "people.insert.multiple";
     public static final String PEOPLE_GET_ALL_ROUTING_KEY = "people.get.all";
     public static final String PEOPLE_GET_BY_NAME_ROUTING_KEY = "people.get.by.name";
+    public static final String PEOPLE_GET_NAMES_ROUTING_KEY = "people.get.names";
     public static final String PEOPLE_DELETE_ROUTING_KEY = "people.delete";
     public static final String PEOPLE_DELETE_ALL_ROUTING_KEY = "people.delete.all";
     public static final String PEOPLE_DAMAGE_CALCULATION_ROUTING_KEY = "people.damage.calculation";
@@ -115,6 +117,13 @@ public class RabbitMQConfig {
     @Bean
     public Queue peopleGetByNameQueue() {
         return QueueBuilder.durable(PEOPLE_GET_BY_NAME_QUEUE)
+                .withArgument("x-message-ttl", 300000) // 5分鐘 TTL
+                .build();
+    }
+
+    @Bean
+    public Queue peopleGetNamesQueue() {
+        return QueueBuilder.durable(PEOPLE_GET_NAMES_QUEUE)
                 .withArgument("x-message-ttl", 300000) // 5分鐘 TTL
                 .build();
     }
@@ -275,6 +284,13 @@ public class RabbitMQConfig {
         return BindingBuilder.bind(peopleGetByNameQueue())
                 .to(mainExchange())
                 .with(PEOPLE_GET_BY_NAME_ROUTING_KEY);
+    }
+
+    @Bean
+    public Binding peopleGetNamesBinding() {
+        return BindingBuilder.bind(peopleGetNamesQueue())
+                .to(mainExchange())
+                .with(PEOPLE_GET_NAMES_ROUTING_KEY);
     }
 
     @Bean
