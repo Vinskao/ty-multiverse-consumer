@@ -72,9 +72,8 @@ public class ReactiveWeaponConsumer {
             .consumeManualAck(RabbitMQConfig.WEAPON_GET_ALL_QUEUE, new ConsumeOptions().qos(2))
             .flatMap(this::handleGetAllWeapons, 2)
             .doOnError(error -> logger.error("❌ Weapon Get-All 消費者發生錯誤", error))
-            .retry()
             .subscribe();
-        
+
         logger.info("📡 啟動 Weapon Get-All Reactive Consumer (concurrency=2, prefetch=2)");
     }
 
@@ -86,9 +85,8 @@ public class ReactiveWeaponConsumer {
             .consumeManualAck(RabbitMQConfig.WEAPON_GET_BY_NAME_QUEUE, new ConsumeOptions().qos(2))
             .flatMap(this::handleGetWeaponByName, 2)
             .doOnError(error -> logger.error("❌ Weapon Get-By-Name 消費者發生錯誤", error))
-            .retry()
             .subscribe();
-        
+
         logger.info("📡 啟動 Weapon Get-By-Name Reactive Consumer (concurrency=2)");
     }
 
@@ -100,9 +98,8 @@ public class ReactiveWeaponConsumer {
             .consumeManualAck(RabbitMQConfig.WEAPON_GET_BY_OWNER_QUEUE, new ConsumeOptions().qos(2))
             .flatMap(this::handleGetWeaponsByOwner, 2)
             .doOnError(error -> logger.error("❌ Weapon Get-By-Owner 消費者發生錯誤", error))
-            .retry()
             .subscribe();
-        
+
         logger.info("📡 啟動 Weapon Get-By-Owner Reactive Consumer (concurrency=2)");
     }
 
@@ -114,9 +111,8 @@ public class ReactiveWeaponConsumer {
             .consumeManualAck(RabbitMQConfig.WEAPON_SAVE_QUEUE, new ConsumeOptions().qos(1))
             .flatMap(this::handleSaveWeapon, 1) // 寫操作序列化處理
             .doOnError(error -> logger.error("❌ Weapon Save 消費者發生錯誤", error))
-            .retry()
             .subscribe();
-        
+
         logger.info("📡 啟動 Weapon Save Reactive Consumer (concurrency=1)");
     }
 
@@ -125,220 +121,240 @@ public class ReactiveWeaponConsumer {
      */
     private void startCheckWeaponExistsConsumer() {
         reactiveReceiver
-            .consumeManualAck(RabbitMQConfig.WEAPON_EXISTS_QUEUE, new ConsumeOptions().qos(3))
-            .flatMap(this::handleCheckWeaponExists, 3) // 輕量級操作，可以更高並發
+            .consumeManualAck(RabbitMQConfig.WEAPON_EXISTS_QUEUE, new ConsumeOptions().qos(2))
+            .flatMap(this::handleCheckWeaponExists, 2) // 降低並發避免 ChannelCreationFunction 問題
             .doOnError(error -> logger.error("❌ Weapon Exists 消費者發生錯誤", error))
-            .retry()
             .subscribe();
-        
-        logger.info("📡 啟動 Weapon Exists Reactive Consumer (concurrency=3)");
+
+        logger.info("📡 啟動 Weapon Exists Reactive Consumer (concurrency=2)");
     }
 
     /**
      * 處理 Get-All Weapons 請求 - 完全 reactive
      */
     private Mono<Void> handleGetAllWeapons(AcknowledgableDelivery delivery) {
-        String messageJson = new String(delivery.getBody());
-        
-        return Mono.fromCallable(() -> {
+        return Mono.defer(() -> {
+            try {
+                String messageJson = new String(delivery.getBody());
                 logger.info("🎯 收到 Weapon Get-All 請求: {}", messageJson);
-                return objectMapper.readValue(messageJson, AsyncMessageDTO.class);
-            })
-            .flatMap(message -> {
+
+                AsyncMessageDTO message = objectMapper.readValue(messageJson, AsyncMessageDTO.class);
                 String requestId = message.getRequestId();
                 logger.info("📝 處理請求: requestId={}", requestId);
-                
+
                 return weaponService.getAllWeapons()
                     .collectList()
                     .flatMap(weaponList -> {
                         logger.info("✅ 查詢完成: 共 {} 個武器, requestId={}", weaponList.size(), requestId);
-                        return asyncResultService.sendCompletedResultReactive(requestId, weaponList);
+                        return asyncResultService.sendCompletedResultReactive(requestId, weaponList)
+                            .doOnSuccess(v -> {
+                                logger.info("🎉 Weapon Get-All 處理完成: requestId={}", requestId);
+                                delivery.ack();
+                            })
+                            .doOnError(error -> {
+                                logger.error("❌ Weapon Get-All 發送結果失敗: requestId={}, error={}", requestId, error.getMessage());
+                                delivery.nack(false);
+                            });
                     })
-                    .doOnSuccess(v -> {
-                        logger.info("🎉 Weapon Get-All 處理完成: requestId={}", requestId);
-                        delivery.ack();
-                    })
-                    .doOnError(error -> {
+                    .onErrorResume(error -> {
                         logger.error("❌ Weapon Get-All 處理失敗: requestId={}, error={}", requestId, error.getMessage());
-                        
-                        asyncResultService.sendFailedResultReactive(requestId, "獲取武器列表失敗: " + error.getMessage())
-                            .doFinally(signalType -> delivery.nack(false))
-                            .subscribe();
+                        return asyncResultService.sendFailedResultReactive(requestId, "獲取武器列表失敗: " + error.getMessage())
+                            .doFinally(signalType -> delivery.nack(false));
                     });
-            })
-            .onErrorResume(parseError -> {
-                logger.error("❌ 無法解析消息: {}, error={}", messageJson, parseError.getMessage());
+
+            } catch (Exception e) {
+                logger.error("❌ 無法解析消息: error={}", e.getMessage());
                 delivery.nack(false);
                 return Mono.empty();
-            })
-            .then();
+            }
+        });
     }
 
     /**
      * 處理 Get-By-Name Weapon 請求 - 完全 reactive
      */
     private Mono<Void> handleGetWeaponByName(AcknowledgableDelivery delivery) {
-        String messageJson = new String(delivery.getBody());
-        
-        return Mono.fromCallable(() -> {
+        return Mono.defer(() -> {
+            try {
+                String messageJson = new String(delivery.getBody());
                 logger.info("🎯 收到 Weapon Get-By-Name 請求: {}", messageJson);
-                return objectMapper.readValue(messageJson, AsyncMessageDTO.class);
-            })
-            .flatMap(message -> {
+
+                AsyncMessageDTO message = objectMapper.readValue(messageJson, AsyncMessageDTO.class);
                 String requestId = message.getRequestId();
                 String name = (String) message.getPayload();
                 logger.info("📝 處理請求: name={}, requestId={}", name, requestId);
-                
+
                 return weaponService.getWeaponById(name)
                     .flatMap(weapon -> {
                         logger.info("✅ 查詢成功: name={}, requestId={}", name, requestId);
-                        return asyncResultService.sendCompletedResultReactive(requestId, weapon);
+                        return asyncResultService.sendCompletedResultReactive(requestId, weapon)
+                            .doOnSuccess(v -> {
+                                logger.info("🎉 Weapon Get-By-Name 處理完成: requestId={}", requestId);
+                                delivery.ack();
+                            })
+                            .doOnError(error -> {
+                                logger.error("❌ Weapon Get-By-Name 發送結果失敗: requestId={}, error={}", requestId, error.getMessage());
+                                delivery.nack(false);
+                            });
                     })
                     .switchIfEmpty(
-                        Mono.defer(() -> {
-                            logger.warn("⚠️ 武器不存在: name={}, requestId={}", name, requestId);
-                            return asyncResultService.sendFailedResultReactive(requestId, "武器不存在: " + name);
-                        })
-                    )
-                    .doOnSuccess(v -> {
-                        logger.info("🎉 Weapon Get-By-Name 處理完成: requestId={}", requestId);
-                        delivery.ack();
-                    })
-                    .doOnError(error -> {
-                        logger.error("❌ Weapon Get-By-Name 處理失敗: requestId={}, error={}", requestId, error.getMessage());
-                        
-                        asyncResultService.sendFailedResultReactive(requestId, "獲取武器失敗: " + error.getMessage())
+                        asyncResultService.sendFailedResultReactive(requestId, "武器不存在: " + name)
                             .doFinally(signalType -> delivery.nack(false))
-                            .subscribe();
+                    )
+                    .onErrorResume(error -> {
+                        logger.error("❌ Weapon Get-By-Name 處理失敗: requestId={}, error={}", requestId, error.getMessage());
+                        return asyncResultService.sendFailedResultReactive(requestId, "獲取武器失敗: " + error.getMessage())
+                            .doFinally(signalType -> delivery.nack(false));
                     });
-            })
-            .onErrorResume(parseError -> {
-                logger.error("❌ 無法解析消息: {}, error={}", messageJson, parseError.getMessage());
+
+            } catch (Exception e) {
+                logger.error("❌ 無法解析消息: error={}", e.getMessage());
                 delivery.nack(false);
                 return Mono.empty();
-            })
-            .then();
+            }
+        });
     }
 
     /**
      * 處理 Get-By-Owner Weapons 請求 - 完全 reactive
      */
     private Mono<Void> handleGetWeaponsByOwner(AcknowledgableDelivery delivery) {
-        String messageJson = new String(delivery.getBody());
-        
-        return Mono.fromCallable(() -> {
+        return Mono.defer(() -> {
+            try {
+                String messageJson = new String(delivery.getBody());
                 logger.info("🎯 收到 Weapon Get-By-Owner 請求: {}", messageJson);
-                return objectMapper.readValue(messageJson, AsyncMessageDTO.class);
-            })
-            .flatMap(message -> {
+
+                AsyncMessageDTO message = objectMapper.readValue(messageJson, AsyncMessageDTO.class);
                 String requestId = message.getRequestId();
                 String owner = (String) message.getPayload();
                 logger.info("📝 處理請求: owner={}, requestId={}", owner, requestId);
-                
+
                 return weaponService.getWeaponsByOwner(owner)
                     .collectList()
                     .flatMap(weaponList -> {
                         logger.info("✅ 查詢完成: owner={}, 共 {} 個武器, requestId={}", owner, weaponList.size(), requestId);
-                        return asyncResultService.sendCompletedResultReactive(requestId, weaponList);
+                        return asyncResultService.sendCompletedResultReactive(requestId, weaponList)
+                            .doOnSuccess(v -> {
+                                logger.info("🎉 Weapon Get-By-Owner 處理完成: requestId={}", requestId);
+                                delivery.ack();
+                            })
+                            .doOnError(error -> {
+                                logger.error("❌ Weapon Get-By-Owner 發送結果失敗: requestId={}, error={}", requestId, error.getMessage());
+                                delivery.nack(false);
+                            });
                     })
-                    .doOnSuccess(v -> {
-                        logger.info("🎉 Weapon Get-By-Owner 處理完成: requestId={}", requestId);
-                        delivery.ack();
-                    })
-                    .doOnError(error -> {
+                    .onErrorResume(error -> {
                         logger.error("❌ Weapon Get-By-Owner 處理失敗: requestId={}, error={}", requestId, error.getMessage());
-                        
-                        asyncResultService.sendFailedResultReactive(requestId, "獲取武器列表失敗: " + error.getMessage())
-                            .doFinally(signalType -> delivery.nack(false))
-                            .subscribe();
+                        return asyncResultService.sendFailedResultReactive(requestId, "獲取武器列表失敗: " + error.getMessage())
+                            .doFinally(signalType -> delivery.nack(false));
                     });
-            })
-            .onErrorResume(parseError -> {
-                logger.error("❌ 無法解析消息: {}, error={}", messageJson, parseError.getMessage());
+
+            } catch (Exception e) {
+                logger.error("❌ 無法解析消息: error={}", e.getMessage());
                 delivery.nack(false);
                 return Mono.empty();
-            })
-            .then();
+            }
+        });
     }
 
     /**
      * 處理 Save Weapon 請求 - 完全 reactive
      */
     private Mono<Void> handleSaveWeapon(AcknowledgableDelivery delivery) {
-        String messageJson = new String(delivery.getBody());
-        
-        return Mono.fromCallable(() -> {
+        return Mono.defer(() -> {
+            try {
+                String messageJson = new String(delivery.getBody());
                 logger.info("🎯 收到 Weapon Save 請求: {}", messageJson);
-                return objectMapper.readValue(messageJson, AsyncMessageDTO.class);
-            })
-            .flatMap(message -> {
+
+                AsyncMessageDTO message = objectMapper.readValue(messageJson, AsyncMessageDTO.class);
                 String requestId = message.getRequestId();
                 Weapon weapon = objectMapper.convertValue(message.getPayload(), Weapon.class);
                 logger.info("📝 處理請求: weapon={}, requestId={}", weapon.getName(), requestId);
-                
+
                 return weaponService.saveWeapon(weapon)
                     .flatMap(savedWeapon -> {
                         logger.info("✅ 保存成功: weapon={}, requestId={}", savedWeapon.getName(), requestId);
-                        return asyncResultService.sendCompletedResultReactive(requestId, savedWeapon);
+                        return asyncResultService.sendCompletedResultReactive(requestId, savedWeapon)
+                            .doOnSuccess(v -> {
+                                logger.info("🎉 Weapon Save 處理完成: requestId={}", requestId);
+                                delivery.ack();
+                            })
+                            .doOnError(error -> {
+                                logger.error("❌ Weapon Save 發送結果失敗: requestId={}, error={}", requestId, error.getMessage());
+                                delivery.nack(false);
+                            });
                     })
-                    .doOnSuccess(v -> {
-                        logger.info("🎉 Weapon Save 處理完成: requestId={}", requestId);
-                        delivery.ack();
-                    })
-                    .doOnError(error -> {
+                    .onErrorResume(error -> {
                         logger.error("❌ Weapon Save 處理失敗: requestId={}, error={}", requestId, error.getMessage());
-                        
-                        asyncResultService.sendFailedResultReactive(requestId, "保存武器失敗: " + error.getMessage())
-                            .doFinally(signalType -> delivery.nack(false))
-                            .subscribe();
+                        return asyncResultService.sendFailedResultReactive(requestId, "保存武器失敗: " + error.getMessage())
+                            .doFinally(signalType -> delivery.nack(false));
                     });
-            })
-            .onErrorResume(parseError -> {
-                logger.error("❌ 無法解析消息: {}, error={}", messageJson, parseError.getMessage());
+
+            } catch (Exception e) {
+                logger.error("❌ 無法解析消息: error={}", e.getMessage());
                 delivery.nack(false);
                 return Mono.empty();
-            })
-            .then();
+            }
+        });
     }
 
     /**
      * 處理 Check Weapon Exists 請求 - 完全 reactive
      */
     private Mono<Void> handleCheckWeaponExists(AcknowledgableDelivery delivery) {
-        String messageJson = new String(delivery.getBody());
-        
-        return Mono.fromCallable(() -> {
+        return Mono.defer(() -> {
+            try {
+                String messageJson = new String(delivery.getBody());
                 logger.info("🎯 收到 Weapon Exists 請求: {}", messageJson);
-                return objectMapper.readValue(messageJson, AsyncMessageDTO.class);
-            })
-            .flatMap(message -> {
+
+                AsyncMessageDTO message = objectMapper.readValue(messageJson, AsyncMessageDTO.class);
                 String requestId = message.getRequestId();
                 String name = (String) message.getPayload();
                 logger.info("📝 處理請求: name={}, requestId={}", name, requestId);
-                
+
                 return weaponService.weaponExists(name)
                     .flatMap(exists -> {
                         logger.info("✅ 檢查完成: name={}, exists={}, requestId={}", name, exists, requestId);
-                        return asyncResultService.sendCompletedResultReactive(requestId, exists);
+                        return asyncResultService.sendCompletedResultReactive(requestId, exists)
+                            .doOnSuccess(v -> {
+                                logger.info("🎉 Weapon Exists 處理完成: requestId={}", requestId);
+                                try {
+                                    delivery.ack();
+                                } catch (Exception e) {
+                                    logger.error("❌ ACK 失敗: requestId={}", requestId, e);
+                                }
+                            })
+                            .doOnError(error -> {
+                                logger.error("❌ Weapon Exists 發送結果失敗: requestId={}, error={}", requestId, error.getMessage());
+                                try {
+                                    delivery.nack(false);
+                                } catch (Exception e) {
+                                    logger.error("❌ NACK 失敗: requestId={}", requestId, e);
+                                }
+                            });
                     })
-                    .doOnSuccess(v -> {
-                        logger.info("🎉 Weapon Exists 處理完成: requestId={}", requestId);
-                        delivery.ack();
-                    })
-                    .doOnError(error -> {
+                    .onErrorResume(error -> {
                         logger.error("❌ Weapon Exists 處理失敗: requestId={}, error={}", requestId, error.getMessage());
-                        
-                        asyncResultService.sendFailedResultReactive(requestId, "檢查武器存在失敗: " + error.getMessage())
-                            .doFinally(signalType -> delivery.nack(false))
-                            .subscribe();
+                        return asyncResultService.sendFailedResultReactive(requestId, "檢查武器存在失敗: " + error.getMessage())
+                            .doFinally(signalType -> {
+                                try {
+                                    delivery.nack(false);
+                                } catch (Exception e) {
+                                    logger.error("❌ NACK 失敗: requestId={}", requestId, e);
+                                }
+                            });
                     });
-            })
-            .onErrorResume(parseError -> {
-                logger.error("❌ 無法解析消息: {}, error={}", messageJson, parseError.getMessage());
-                delivery.nack(false);
+
+            } catch (Exception e) {
+                logger.error("❌ 無法解析消息: error={}", e.getMessage());
+                try {
+                    delivery.nack(false);
+                } catch (Exception ne) {
+                    logger.error("❌ NACK 失敗: error={}", ne.getMessage(), ne);
+                }
                 return Mono.empty();
-            })
-            .then();
+            }
+        });
     }
 
     @PreDestroy

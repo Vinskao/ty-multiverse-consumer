@@ -18,9 +18,6 @@ import org.springframework.core.task.TaskExecutor;
 @EnableRabbit
 public class RabbitMQConfig {
     
-    // 在開發環境中，如果隊列已存在但配置不一致，可以設置為 true 來清理隊列
-    private static final boolean CLEAR_QUEUES_ON_STARTUP = false;
-
     // 添加調試日誌
     private static final Logger logger = LoggerFactory.getLogger(RabbitMQConfig.class);
 
@@ -430,7 +427,7 @@ public class RabbitMQConfig {
     public org.springframework.amqp.support.converter.DefaultClassMapper classMapper() {
         org.springframework.amqp.support.converter.DefaultClassMapper classMapper = 
             new org.springframework.amqp.support.converter.DefaultClassMapper();
-        classMapper.setTrustedPackages("tw.com.tymbackend.*", "com.vinskao.ty_multiverse_consumer.*");
+        classMapper.setTrustedPackages("*");
         return classMapper;
     }
 
@@ -445,6 +442,7 @@ public class RabbitMQConfig {
     /**
      * 使用虛擬線程的 RabbitListener 容器工廠
      */
+
     @Bean
     public SimpleRabbitListenerContainerFactory rabbitListenerContainerFactory(
             ConnectionFactory connectionFactory,
@@ -452,6 +450,7 @@ public class RabbitMQConfig {
         SimpleRabbitListenerContainerFactory factory = new SimpleRabbitListenerContainerFactory();
         factory.setConnectionFactory(connectionFactory);
         factory.setTaskExecutor(applicationTaskExecutor);
+        factory.setMessageConverter(jsonMessageConverter()); // 使用相同的消息轉換器
         return factory;
     }
 }

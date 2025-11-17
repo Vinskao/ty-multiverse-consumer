@@ -1,7 +1,5 @@
 package com.vinskao.ty_multiverse_consumer.core.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vinskao.ty_multiverse_consumer.core.dto.AsyncResultMessage;
 import com.vinskao.ty_multiverse_consumer.config.RabbitMQConfig;
 import org.slf4j.Logger;
@@ -13,6 +11,7 @@ import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 import reactor.rabbitmq.OutboundMessage;
 import reactor.rabbitmq.Sender;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * 異步結果服務
@@ -32,7 +31,7 @@ public class AsyncResultService {
     
     @Autowired
     private RabbitTemplate rabbitTemplate;
-    
+
     @Autowired
     private ObjectMapper objectMapper;
     
@@ -111,9 +110,6 @@ public class AsyncResultService {
                 throw sendException;
             }
 
-        } catch (JsonProcessingException e) {
-            logger.error("❌ 序列化異步結果消息失敗: {}", e.getMessage(), e);
-            throw new RuntimeException("消息序列化失敗", e);
         } catch (Exception e) {
             logger.error("❌ 發送異步結果消息失敗: {}", e.getMessage(), e);
             logger.error("  - 交換機: {}", RabbitMQConfig.MAIN_EXCHANGE);
@@ -131,12 +127,13 @@ public class AsyncResultService {
             logger.warn("⚠️ Reactive Sender 不可用，使用 blocking 版本");
             return Mono.fromRunnable(() -> sendAsyncResult(resultMessage));
         }
-        
-        return Mono.fromCallable(() -> {
+
+        return Mono.defer(() -> {
                 try {
-                    return objectMapper.writeValueAsString(resultMessage);
-                } catch (JsonProcessingException e) {
-                    throw new RuntimeException("消息序列化失敗", e);
+                    String messageJson = objectMapper.writeValueAsString(resultMessage);
+                    return Mono.just(messageJson);
+                } catch (Exception e) {
+                    return Mono.error(new RuntimeException("消息序列化失敗", e));
                 }
             })
             .flatMap(messageJson -> {
@@ -144,13 +141,13 @@ public class AsyncResultService {
                 logger.info("  - 交換機: tymb-exchange");
                 logger.info("  - 路由鍵: async.result");
                 logger.info("  - 消息內容: {}", messageJson);
-                
+
                 OutboundMessage outboundMessage = new OutboundMessage(
                     "tymb-exchange",
-                    "async.result", 
+                    "async.result",
                     messageJson.getBytes()
                 );
-                
+
                 return reactiveSender.send(Mono.just(outboundMessage))
                     .doOnSuccess(v -> logger.info("✅ 成功發送異步結果消息 (Reactive): requestId={}, status={}",
                                                  resultMessage.getRequestId(), resultMessage.getStatus()))

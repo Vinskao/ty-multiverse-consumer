@@ -2,7 +2,6 @@ package com.vinskao.ty_multiverse_consumer.service;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.ReactiveRedisOperations;
 import org.springframework.data.redis.core.ReactiveValueOperations;
 import org.springframework.stereotype.Service;
@@ -17,7 +16,6 @@ public class RedisService {
 
     private final ReactiveValueOperations<String, String> values;
 
-    @Autowired
     public RedisService(ReactiveRedisOperations<String, String> redisOperations) {
         this.values = redisOperations.opsForValue();
     }

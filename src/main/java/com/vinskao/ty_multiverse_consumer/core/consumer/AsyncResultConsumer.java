@@ -22,6 +22,8 @@ import org.springframework.stereotype.Component;
 @Component
 @ConditionalOnProperty(name = "spring.rabbitmq.enabled", havingValue = "true")
 @ConditionalOnProperty(name = "spring.rabbitmq.legacy.enabled", havingValue = "true", matchIfMissing = false)
+@ConditionalOnProperty(name = "ty.multiverse.consumer.async-result-monitor.enabled",
+    havingValue = "true", matchIfMissing = false)
 public class AsyncResultConsumer {
     
     private static final Logger logger = LoggerFactory.getLogger(AsyncResultConsumer.class);

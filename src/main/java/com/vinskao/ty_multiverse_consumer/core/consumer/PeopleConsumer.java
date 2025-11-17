@@ -115,11 +115,12 @@ public class PeopleConsumer {
             
             AsyncMessageDTO message = objectMapper.readValue(messageJson, AsyncMessageDTO.class);
             String requestId = message.getRequestId();
-            String name = (String) message.getPayload();
+            String name = extractNameFromPayload(message.getPayload());
             
             logger.info("開始根據名稱獲取角色: name={}, requestId={}", name, requestId);
             
-            // 處理請求
+            // 處理請求（使用大小寫不敏感查詢）
+            logger.info("查詢角色: name='{}', requestId={}", name, requestId);
             People people = peopleService.getPeopleByName(name).block();
 
             if (people != null) {
@@ -309,5 +310,32 @@ public class PeopleConsumer {
                 logger.error("無法解析請求ID，無法發送錯誤回應: {}", parseError.getMessage());
             }
         }
+    }
+
+    /**
+     * 從 payload 中提取名稱
+     * 支持字符串格式和對象格式 {"name": "..."}
+     */
+    private String extractNameFromPayload(Object payload) {
+        if (payload == null) {
+            throw new IllegalArgumentException("Payload 不能為空");
+        }
+
+        // 如果是字符串，直接返回
+        if (payload instanceof String) {
+            return (String) payload;
+        }
+
+        // 如果是 Map，嘗試提取 name 字段
+        if (payload instanceof java.util.Map) {
+            @SuppressWarnings("unchecked")
+            java.util.Map<String, Object> map = (java.util.Map<String, Object>) payload;
+            Object nameObj = map.get("name");
+            if (nameObj instanceof String) {
+                return (String) nameObj;
+            }
+        }
+
+        throw new IllegalArgumentException("無法從 payload 中提取名稱: " + payload.getClass() + " - " + payload);
     }
 }

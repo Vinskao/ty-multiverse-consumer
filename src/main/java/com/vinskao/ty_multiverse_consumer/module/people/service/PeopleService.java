@@ -88,13 +88,20 @@ public class PeopleService {
     }
 
     /**
-     * 根據名稱獲取角色
+     * 根據名稱獲取角色（大小寫不敏感）
      *
      * @param name 角色名稱
      * @return 角色資訊，如果不存在則返回空
      */
     public Mono<People> getPeopleByName(String name) {
-        return peopleRepository.findByName(name);
+        logger.debug("查詢角色: name={}", name);
+        return peopleRepository.findByNameIgnoreCase(name)
+            .doOnNext(people -> logger.debug("找到角色: name={}", people.getName()))
+            .doOnSuccess(people -> {
+                if (people == null) {
+                    logger.debug("角色不存在: name={}", name);
+                }
+            });
     }
     
     /**

@@ -12,6 +12,7 @@ import reactor.core.publisher.Mono;
 import reactor.rabbitmq.AcknowledgableDelivery;
 import reactor.rabbitmq.ConsumeOptions;
 import reactor.rabbitmq.Receiver;
+import reactor.util.retry.Retry;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -28,6 +29,8 @@ import jakarta.annotation.PreDestroy;
  */
 @Component
 @ConditionalOnProperty(name = "spring.rabbitmq.enabled", havingValue = "true")
+@ConditionalOnProperty(name = "ty.multiverse.consumer.async-result-monitor.enabled",
+    havingValue = "true", matchIfMissing = false)
 public class ReactiveAsyncResultConsumer {
 
     private static final Logger logger = LoggerFactory.getLogger(ReactiveAsyncResultConsumer.class);
@@ -60,7 +63,8 @@ public class ReactiveAsyncResultConsumer {
             .consumeManualAck(RabbitMQConfig.ASYNC_RESULT_QUEUE, new ConsumeOptions().qos(1))
             .flatMap(this::handleAsyncResult, 1) // 序列化處理，避免日誌混亂
             .doOnError(error -> logger.error("❌ AsyncResult 消費者發生錯誤", error))
-            .retry() // 自動重試
+            .retryWhen(Retry.backoff(3, java.time.Duration.ofSeconds(5))
+                .maxBackoff(java.time.Duration.ofSeconds(30))) // 有限重試，避免無限循環
             .subscribe();
         
         logger.info("📡 啟動 AsyncResult Reactive Consumer (concurrency=1, prefetch=1)");

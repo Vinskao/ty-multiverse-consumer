@@ -13,7 +13,12 @@ import java.util.List;
 @Repository
 public interface PeopleRepository extends StringPkRepository<People> {
 
+    // 大小寫敏感的查詢（保留原有方法）
     Mono<People> findByName(String name);
+
+    // 大小寫不敏感的查詢（新增）
+    @Query("SELECT * FROM people WHERE LOWER(name) = LOWER(:name)")
+    Mono<People> findByNameIgnoreCase(@Param("name") String name);
 
     Mono<Boolean> existsByName(String name);
 
