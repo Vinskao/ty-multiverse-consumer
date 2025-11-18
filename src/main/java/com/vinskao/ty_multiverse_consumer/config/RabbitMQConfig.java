@@ -8,11 +8,15 @@ import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
 import org.springframework.amqp.support.converter.MessageConverter;
+import org.springframework.amqp.support.converter.DefaultClassMapper;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.amqp.rabbit.config.SimpleRabbitListenerContainerFactory;
 import org.springframework.amqp.rabbit.annotation.EnableRabbit;
 import org.springframework.core.task.TaskExecutor;
+
+import java.util.Map;
+import java.util.HashMap;
 
 @Configuration
 @EnableRabbit
@@ -422,12 +426,23 @@ public class RabbitMQConfig {
     
     /**
      * 配置 ClassMapper 以處理跨項目的類型映射
+     * 將 backend 模組的類別名稱映射到 consumer 模組的對應類別
      */
     @Bean
-    public org.springframework.amqp.support.converter.DefaultClassMapper classMapper() {
-        org.springframework.amqp.support.converter.DefaultClassMapper classMapper = 
-            new org.springframework.amqp.support.converter.DefaultClassMapper();
+    public DefaultClassMapper classMapper() {
+        DefaultClassMapper classMapper = new DefaultClassMapper();
         classMapper.setTrustedPackages("*");
+        
+        // 映射 backend 的 AsyncMessageDTO 到 consumer 的 AsyncMessageDTO
+        Map<String, Class<?>> idClassMapping = new HashMap<>();
+        idClassMapping.put(
+            "tw.com.tymbackend.core.message.AsyncMessageDTO",
+            com.vinskao.ty_multiverse_consumer.core.dto.AsyncMessageDTO.class
+        );
+        classMapper.setIdClassMapping(idClassMapping);
+        
+        logger.info("✅ 配置 ClassMapper: 映射 tw.com.tymbackend.core.message.AsyncMessageDTO -> com.vinskao.ty_multiverse_consumer.core.dto.AsyncMessageDTO");
+        
         return classMapper;
     }
 

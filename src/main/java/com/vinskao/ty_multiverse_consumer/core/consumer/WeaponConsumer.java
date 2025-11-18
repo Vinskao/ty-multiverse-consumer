@@ -45,11 +45,9 @@ public class WeaponConsumer {
      * 監聽 Weapon 獲取所有請求
      */
     @RabbitListener(queues = "weapon-get-all", concurrency = "2")
-    public void handleGetAllWeapons(String messageJson) {
+    public void handleGetAllWeapons(AsyncMessageDTO message) {
         try {
-            logger.info("收到獲取所有武器請求: {}", messageJson);
-            
-            AsyncMessageDTO message = objectMapper.readValue(messageJson, AsyncMessageDTO.class);
+            logger.info("收到獲取所有武器請求: {}", message);
             String requestId = message.getRequestId();
             
             logger.info("開始獲取所有武器: requestId={}", requestId);
@@ -68,19 +66,15 @@ public class WeaponConsumer {
         } catch (Exception e) {
             logger.error("處理獲取所有武器請求失敗: {}", e.getMessage(), e);
             
-            // 嘗試解析請求ID
+            // 發送錯誤結果給 Producer
             try {
-                AsyncMessageDTO message = objectMapper.readValue(messageJson, AsyncMessageDTO.class);
                 String requestId = message.getRequestId();
-                
-                // 發送錯誤結果給 Producer
                 asyncResultService.sendFailedResult(
                     requestId,
                     "獲取武器列表失敗: " + e.getMessage()
                 );
-                
-            } catch (Exception parseError) {
-                logger.error("無法解析請求ID，無法發送錯誤回應: {}", parseError.getMessage());
+            } catch (Exception sendError) {
+                logger.error("無法發送錯誤回應: {}", sendError.getMessage());
             }
         }
     }
@@ -89,11 +83,9 @@ public class WeaponConsumer {
      * 監聽 Weapon 根據名稱獲取請求
      */
     @RabbitListener(queues = "weapon-get-by-name", concurrency = "2")
-    public void handleGetWeaponByName(String messageJson) {
+    public void handleGetWeaponByName(AsyncMessageDTO message) {
         try {
-            logger.info("收到根據名稱獲取武器請求: {}", messageJson);
-            
-            AsyncMessageDTO message = objectMapper.readValue(messageJson, AsyncMessageDTO.class);
+            logger.info("收到根據名稱獲取武器請求: {}", message);
             String requestId = message.getRequestId();
             String name = (String) message.getPayload();
             
@@ -123,19 +115,15 @@ public class WeaponConsumer {
         } catch (Exception e) {
             logger.error("處理根據名稱獲取武器請求失敗: {}", e.getMessage(), e);
             
-            // 嘗試解析請求ID
+            // 發送錯誤結果給 Producer
             try {
-                AsyncMessageDTO message = objectMapper.readValue(messageJson, AsyncMessageDTO.class);
                 String requestId = message.getRequestId();
-                
-                // 發送錯誤結果給 Producer
                 asyncResultService.sendFailedResult(
                     requestId,
                     "獲取武器失敗: " + e.getMessage()
                 );
-                
-            } catch (Exception parseError) {
-                logger.error("無法解析請求ID，無法發送錯誤回應: {}", parseError.getMessage());
+            } catch (Exception sendError) {
+                logger.error("無法發送錯誤回應: {}", sendError.getMessage());
             }
         }
     }
@@ -144,11 +132,9 @@ public class WeaponConsumer {
      * 監聽 Weapon 根據擁有者獲取請求
      */
     @RabbitListener(queues = "weapon-get-by-owner", concurrency = "2")
-    public void handleGetWeaponsByOwner(String messageJson) {
+    public void handleGetWeaponsByOwner(AsyncMessageDTO message) {
         try {
-            logger.info("收到根據擁有者獲取武器請求: {}", messageJson);
-            
-            AsyncMessageDTO message = objectMapper.readValue(messageJson, AsyncMessageDTO.class);
+            logger.info("收到根據擁有者獲取武器請求: {}", message);
             String requestId = message.getRequestId();
             String owner = (String) message.getPayload();
             
@@ -168,19 +154,15 @@ public class WeaponConsumer {
         } catch (Exception e) {
             logger.error("處理根據擁有者獲取武器請求失敗: {}", e.getMessage(), e);
             
-            // 嘗試解析請求ID
+            // 發送錯誤結果給 Producer
             try {
-                AsyncMessageDTO message = objectMapper.readValue(messageJson, AsyncMessageDTO.class);
                 String requestId = message.getRequestId();
-                
-                // 發送錯誤結果給 Producer
                 asyncResultService.sendFailedResult(
                     requestId,
                     "獲取武器失敗: " + e.getMessage()
                 );
-                
-            } catch (Exception parseError) {
-                logger.error("無法解析請求ID，無法發送錯誤回應: {}", parseError.getMessage());
+            } catch (Exception sendError) {
+                logger.error("無法發送錯誤回應: {}", sendError.getMessage());
             }
         }
     }
@@ -189,11 +171,9 @@ public class WeaponConsumer {
      * 監聽 Weapon 保存請求
      */
     @RabbitListener(queues = "weapon-save", concurrency = "2")
-    public void handleSaveWeapon(String messageJson) {
+    public void handleSaveWeapon(AsyncMessageDTO message) {
         try {
-            logger.info("收到保存武器請求: {}", messageJson);
-            
-            AsyncMessageDTO message = objectMapper.readValue(messageJson, AsyncMessageDTO.class);
+            logger.info("收到保存武器請求: {}", message);
             String requestId = message.getRequestId();
             Weapon weapon = objectMapper.convertValue(message.getPayload(), Weapon.class);
             
@@ -213,19 +193,15 @@ public class WeaponConsumer {
         } catch (Exception e) {
             logger.error("處理保存武器請求失敗: {}", e.getMessage(), e);
             
-            // 嘗試解析請求ID
+            // 發送錯誤結果給 Producer
             try {
-                AsyncMessageDTO message = objectMapper.readValue(messageJson, AsyncMessageDTO.class);
                 String requestId = message.getRequestId();
-                
-                // 發送錯誤結果給 Producer
                 asyncResultService.sendFailedResult(
                     requestId,
                     "保存武器失敗: " + e.getMessage()
                 );
-                
-            } catch (Exception parseError) {
-                logger.error("無法解析請求ID，無法發送錯誤回應: {}", parseError.getMessage());
+            } catch (Exception sendError) {
+                logger.error("無法發送錯誤回應: {}", sendError.getMessage());
             }
         }
     }
@@ -234,11 +210,9 @@ public class WeaponConsumer {
      * 監聽 Weapon 刪除請求
      */
     @RabbitListener(queues = "weapon-delete", concurrency = "2")
-    public void handleDeleteWeapon(String messageJson) {
+    public void handleDeleteWeapon(AsyncMessageDTO message) {
         try {
-            logger.info("收到刪除武器請求: {}", messageJson);
-            
-            AsyncMessageDTO message = objectMapper.readValue(messageJson, AsyncMessageDTO.class);
+            logger.info("收到刪除武器請求: {}", message);
             String requestId = message.getRequestId();
             String name = (String) message.getPayload();
             
@@ -258,19 +232,15 @@ public class WeaponConsumer {
         } catch (Exception e) {
             logger.error("處理刪除武器請求失敗: {}", e.getMessage(), e);
             
-            // 嘗試解析請求ID
+            // 發送錯誤結果給 Producer
             try {
-                AsyncMessageDTO message = objectMapper.readValue(messageJson, AsyncMessageDTO.class);
                 String requestId = message.getRequestId();
-                
-                // 發送錯誤結果給 Producer
                 asyncResultService.sendFailedResult(
                     requestId,
                     "刪除武器失敗: " + e.getMessage()
                 );
-                
-            } catch (Exception parseError) {
-                logger.error("無法解析請求ID，無法發送錯誤回應: {}", parseError.getMessage());
+            } catch (Exception sendError) {
+                logger.error("無法發送錯誤回應: {}", sendError.getMessage());
             }
         }
     }
@@ -279,11 +249,9 @@ public class WeaponConsumer {
      * 監聽 Weapon 刪除所有請求
      */
     @RabbitListener(queues = "weapon-delete-all", concurrency = "2")
-    public void handleDeleteAllWeapons(String messageJson) {
+    public void handleDeleteAllWeapons(AsyncMessageDTO message) {
         try {
-            logger.info("收到刪除所有武器請求: {}", messageJson);
-            
-            AsyncMessageDTO message = objectMapper.readValue(messageJson, AsyncMessageDTO.class);
+            logger.info("收到刪除所有武器請求: {}", message);
             String requestId = message.getRequestId();
             
             logger.info("開始刪除所有武器: requestId={}", requestId);
@@ -302,19 +270,15 @@ public class WeaponConsumer {
         } catch (Exception e) {
             logger.error("處理刪除所有武器請求失敗: {}", e.getMessage(), e);
             
-            // 嘗試解析請求ID
+            // 發送錯誤結果給 Producer
             try {
-                AsyncMessageDTO message = objectMapper.readValue(messageJson, AsyncMessageDTO.class);
                 String requestId = message.getRequestId();
-                
-                // 發送錯誤結果給 Producer
                 asyncResultService.sendFailedResult(
                     requestId,
                     "刪除所有武器失敗: " + e.getMessage()
                 );
-                
-            } catch (Exception parseError) {
-                logger.error("無法解析請求ID，無法發送錯誤回應: {}", parseError.getMessage());
+            } catch (Exception sendError) {
+                logger.error("無法發送錯誤回應: {}", sendError.getMessage());
             }
         }
     }
@@ -323,11 +287,9 @@ public class WeaponConsumer {
      * 監聽 Weapon 存在檢查請求
      */
     @RabbitListener(queues = "weapon-exists", concurrency = "2")
-    public void handleWeaponExists(String messageJson) {
+    public void handleWeaponExists(AsyncMessageDTO message) {
         try {
-            logger.info("收到檢查武器存在請求: {}", messageJson);
-            
-            AsyncMessageDTO message = objectMapper.readValue(messageJson, AsyncMessageDTO.class);
+            logger.info("收到檢查武器存在請求: {}", message);
             String requestId = message.getRequestId();
             String name = (String) message.getPayload();
             
@@ -347,19 +309,15 @@ public class WeaponConsumer {
         } catch (Exception e) {
             logger.error("處理檢查武器存在請求失敗: {}", e.getMessage(), e);
             
-            // 嘗試解析請求ID
+            // 發送錯誤結果給 Producer
             try {
-                AsyncMessageDTO message = objectMapper.readValue(messageJson, AsyncMessageDTO.class);
                 String requestId = message.getRequestId();
-                
-                // 發送錯誤結果給 Producer
                 asyncResultService.sendFailedResult(
                     requestId,
                     "檢查武器存在失敗: " + e.getMessage()
                 );
-                
-            } catch (Exception parseError) {
-                logger.error("無法解析請求ID，無法發送錯誤回應: {}", parseError.getMessage());
+            } catch (Exception sendError) {
+                logger.error("無法發送錯誤回應: {}", sendError.getMessage());
             }
         }
     }
