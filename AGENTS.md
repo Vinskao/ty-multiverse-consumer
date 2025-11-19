@@ -1,5 +1,13 @@
 # TY Multiverse Consumer - Agent Guide
 
+## 📁 文档组织规定
+
+**重要**：所有非 `AGENTS.md` 和 `README.md` 的 Markdown 文档都必须放在项目的 `/docs` 目录下。
+
+- ✅ **允许在根目录**：`AGENTS.md`、`README.md`
+- ✅ **必须放在 `/docs`**：所有其他 `.md` 文件
+- 📂 **文档目录结构**：`/docs/` 目录下可以创建子目录来组织相关文档
+
 ## Project Overview
 
 TY Multiverse Consumer is a message-driven service that processes asynchronous tasks and handles background operations for the TY Multiverse system. It consumes messages from RabbitMQ, processes business logic, and integrates with other services via REST APIs and gRPC.
