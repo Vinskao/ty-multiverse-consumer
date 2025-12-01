@@ -4,6 +4,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.retry.annotation.Retryable;
+import org.springframework.r2dbc.core.DatabaseClient;
 
 import com.vinskao.ty_multiverse_consumer.module.people.dao.PeopleRepository;
 import com.vinskao.ty_multiverse_consumer.module.people.domain.vo.People;
@@ -28,14 +29,17 @@ public class PeopleService {
     private static final Logger logger = LoggerFactory.getLogger(PeopleService.class);
 
     private final PeopleRepository peopleRepository;
+    private final DatabaseClient databaseClient;
 
     /**
      * 建構函數
      * 
      * @param peopleRepository 角色資料庫操作介面
+     * @param databaseClient R2DBC DatabaseClient
      */
-    public PeopleService(PeopleRepository peopleRepository) {
+    public PeopleService(PeopleRepository peopleRepository, DatabaseClient databaseClient) {
         this.peopleRepository = peopleRepository;
+        this.databaseClient = databaseClient;
     }
 
     /**
@@ -148,7 +152,7 @@ public class PeopleService {
     }
 
     /**
-     * 保存所有角色
+     * 保存所有角色（使用 DatabaseClient 執行完整 INSERT）
      *
      * @param peopleList 要保存的角色列表
      * @return 保存後的角色列表
@@ -159,7 +163,7 @@ public class PeopleService {
 
         return Flux.fromIterable(peopleList)
             .index()
-            .flatMap(tuple -> {
+            .concatMap(tuple -> {  // 使用 concatMap 順序執行，避免並發導致的事務問題
                 Long index = tuple.getT1();
                 People people = tuple.getT2();
 
@@ -167,8 +171,9 @@ public class PeopleService {
 
                 // 確保基本字段不為 null
                 if (people.getName() == null) {
-                    logger.error("角色名稱為 null，跳過此角色");
-                    return Mono.empty();
+                    String errorMsg = String.format("角色名稱為 null，索引: %d", index);
+                    logger.error(errorMsg);
+                    return Mono.error(new IllegalArgumentException(errorMsg));
                 }
 
                 // 設置時間戳
@@ -177,18 +182,116 @@ public class PeopleService {
                 }
                 people.setUpdatedAt(LocalDateTime.now());
 
-                // 保存並處理結果
-                return peopleRepository.save(people)
+                // 使用 DatabaseClient 執行完整的 INSERT 語句
+                return insertPeopleWithAllFields(people)
                     .doOnNext(savedPeople -> logger.info("成功保存角色: name={}, version={}",
                         people.getName(), savedPeople.getVersion()))
-                    .onErrorResume(e -> {
-                        logger.error("保存角色失敗: name={}, error={}", people.getName(), e.getMessage());
-                        return Mono.empty(); // 繼續處理其他角色
-                    });
-            })
-            .collectList()
-            .doOnNext(savedList -> logger.info("批量保存完成，成功保存 {} 個角色", savedList.size()))
-            .flatMapMany(Flux::fromIterable);
+                    .doOnError(e -> logger.error("保存角色失敗: name={}, error={}", 
+                        people.getName(), e.getMessage(), e));
+            });
+    }
+
+    /**
+     * 使用 DatabaseClient 插入角色（包含所有字段）
+     *
+     * @param people 要插入的角色
+     * @return 插入後的角色
+     */
+    private Mono<People> insertPeopleWithAllFields(People people) {
+        String sql = """
+            INSERT INTO people (
+                name_original, code_name, name, physic_power, magic_power, utility_power,
+                dob, race, attributes, gender, ass_size, boobs_size, height_cm, weight_kg,
+                profession, combat, favorite_foods, job, physics, known_as, personality,
+                interest, likes, dislikes, concubine, faction, army_id, army_name,
+                dept_id, dept_name, origin_army_id, origin_army_name, gave_birth,
+                email, age, proxy, base_attributes, bonus_attributes, state_attributes,
+                created_at, updated_at, version
+            ) VALUES (
+                :nameOriginal, :codeName, :name, :physicPower, :magicPower, :utilityPower,
+                :dob, :race, :attributes, :gender, :assSize, :boobsSize, :heightCm, :weightKg,
+                :profession, :combat, :favoriteFoods, :job, :physics, :knownAs, :personality,
+                :interest, :likes, :dislikes, :concubine, :faction, :armyId, :armyName,
+                :deptId, :deptName, :originArmyId, :originArmyName, :gaveBirth,
+                :email, :age, :proxy, :baseAttributes, :bonusAttributes, :stateAttributes,
+                :createdAt, :updatedAt, :version
+            )
+            """;
+
+        DatabaseClient.GenericExecuteSpec spec = databaseClient.sql(sql);
+        
+        // 打印調試信息
+        logger.debug("準備綁定字段值:");
+        logger.debug("  codeName={}, dob={}, race={}, gender={}", 
+            people.getCodeName(), people.getDob(), people.getRace(), people.getGender());
+        logger.debug("  profession={}, job={}, physics={}, email={}", 
+            people.getProfession(), people.getJob(), people.getPhysics(), people.getEmail());
+        
+        // 綁定所有字段，處理 null 值
+        spec = bindValue(spec, "nameOriginal", people.getNameOriginal(), String.class);
+        spec = bindValue(spec, "codeName", people.getCodeName(), String.class);
+        spec = bindValue(spec, "name", people.getName(), String.class);
+        spec = bindValue(spec, "physicPower", people.getPhysicPower(), Integer.class);
+        spec = bindValue(spec, "magicPower", people.getMagicPower(), Integer.class);
+        spec = bindValue(spec, "utilityPower", people.getUtilityPower(), Integer.class);
+        spec = bindValue(spec, "dob", people.getDob(), String.class);
+        spec = bindValue(spec, "race", people.getRace(), String.class);
+        spec = bindValue(spec, "attributes", people.getAttributes(), String.class);
+        spec = bindValue(spec, "gender", people.getGender(), String.class);
+        spec = bindValue(spec, "assSize", people.getAssSize(), String.class);
+        spec = bindValue(spec, "boobsSize", people.getBoobsSize(), String.class);
+        spec = bindValue(spec, "heightCm", people.getHeightCm(), Integer.class);
+        spec = bindValue(spec, "weightKg", people.getWeightKg(), Integer.class);
+        spec = bindValue(spec, "profession", people.getProfession(), String.class);
+        spec = bindValue(spec, "combat", people.getCombat(), String.class);
+        spec = bindValue(spec, "favoriteFoods", people.getFavoriteFoods(), String.class);
+        spec = bindValue(spec, "job", people.getJob(), String.class);
+        spec = bindValue(spec, "physics", people.getPhysics(), String.class);
+        spec = bindValue(spec, "knownAs", people.getKnownAs(), String.class);
+        spec = bindValue(spec, "personality", people.getPersonality(), String.class);
+        spec = bindValue(spec, "interest", people.getInterest(), String.class);
+        spec = bindValue(spec, "likes", people.getLikes(), String.class);
+        spec = bindValue(spec, "dislikes", people.getDislikes(), String.class);
+        spec = bindValue(spec, "concubine", people.getConcubine(), String.class);
+        spec = bindValue(spec, "faction", people.getFaction(), String.class);
+        spec = bindValue(spec, "armyId", people.getArmyId(), Integer.class);
+        spec = bindValue(spec, "armyName", people.getArmyName(), String.class);
+        spec = bindValue(spec, "deptId", people.getDeptId(), Integer.class);
+        spec = bindValue(spec, "deptName", people.getDeptName(), String.class);
+        spec = bindValue(spec, "originArmyId", people.getOriginArmyId(), Integer.class);
+        spec = bindValue(spec, "originArmyName", people.getOriginArmyName(), String.class);
+        spec = bindValue(spec, "gaveBirth", people.getGaveBirth(), Boolean.class);
+        spec = bindValue(spec, "email", people.getEmail(), String.class);
+        spec = bindValue(spec, "age", people.getAge(), Integer.class);
+        spec = bindValue(spec, "proxy", people.getProxy(), String.class);
+        spec = bindValue(spec, "baseAttributes", people.getBaseAttributes(), String.class);
+        spec = bindValue(spec, "bonusAttributes", people.getBonusAttributes(), String.class);
+        spec = bindValue(spec, "stateAttributes", people.getStateAttributes(), String.class);
+        spec = bindValue(spec, "createdAt", people.getCreatedAt(), LocalDateTime.class);
+        spec = bindValue(spec, "updatedAt", people.getUpdatedAt(), LocalDateTime.class);
+        spec = bindValue(spec, "version", people.getVersion() != null ? people.getVersion() : 0L, Long.class);
+
+        return spec.fetch()
+            .rowsUpdated()
+            .thenReturn(people)
+            .doOnSuccess(p -> logger.debug("DatabaseClient INSERT 成功: name={}", p.getName()))
+            .doOnError(e -> logger.error("DatabaseClient INSERT 失敗: name={}, error={}", 
+                people.getName(), e.getMessage(), e));
+    }
+
+    /**
+     * 輔助方法：綁定參數值，處理 null 值
+     */
+    private <T> DatabaseClient.GenericExecuteSpec bindValue(
+            DatabaseClient.GenericExecuteSpec spec, 
+            String name, 
+            T value, 
+            Class<T> type) {
+        if (value == null) {
+            return spec.bindNull(name, type);
+        } else {
+            return spec.bind(name, value);
+        }
     }
 
     /**

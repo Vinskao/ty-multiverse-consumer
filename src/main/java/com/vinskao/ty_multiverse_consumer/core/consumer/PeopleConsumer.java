@@ -1,6 +1,7 @@
 package com.vinskao.ty_multiverse_consumer.core.consumer;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.type.TypeReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
@@ -295,21 +296,38 @@ public class PeopleConsumer {
             logger.info("開始批量新增角色: requestId={}, payload={}", requestId, payload);
 
             // 將 payload 轉換為 People 列表
+            // 使用 readValue 代替 convertValue 以確保正確的反序列化
             List<People> peopleList;
-            if (payload instanceof List) {
-                @SuppressWarnings("unchecked")
-                List<Object> payloadList = (List<Object>) payload;
-                peopleList = new java.util.ArrayList<>();
+            try {
+                // 先將 payload 轉換為 JSON 字符串
+                String jsonString = objectMapper.writeValueAsString(payload);
+                logger.info("🔍 Payload JSON: {}", jsonString);
                 
-                for (Object item : payloadList) {
-                    People person = objectMapper.convertValue(item, People.class);
-                    peopleList.add(person);
-                }
-            } else {
-                throw new IllegalArgumentException("Payload 必須是 People 列表");
+                // 使用 readValue 反序列化為 People 列表
+                peopleList = objectMapper.readValue(
+                    jsonString, 
+                    new TypeReference<List<People>>() {}
+                );
+                
+                logger.info("✅ 成功反序列化 {} 個角色", peopleList.size());
+            } catch (Exception e) {
+                logger.error("反序列化 People 列表失敗: {}", e.getMessage(), e);
+                throw new IllegalArgumentException("無法解析 People 列表: " + e.getMessage(), e);
             }
 
             logger.info("準備批量新增 {} 個角色: requestId={}", peopleList.size(), requestId);
+        
+        // 調試：打印第一個角色的所有字段
+        if (!peopleList.isEmpty()) {
+            People firstPerson = peopleList.get(0);
+            logger.debug("第一個角色的字段值:");
+            logger.debug("  name={}, codeName={}, dob={}, race={}", 
+                firstPerson.getName(), firstPerson.getCodeName(), firstPerson.getDob(), firstPerson.getRace());
+            logger.debug("  gender={}, profession={}, job={}, physics={}", 
+                firstPerson.getGender(), firstPerson.getProfession(), firstPerson.getJob(), firstPerson.getPhysics());
+            logger.debug("  email={}, age={}, proxy={}", 
+                firstPerson.getEmail(), firstPerson.getAge(), firstPerson.getProxy());
+        }
 
             // 處理請求 - 使用批量保存方法
             List<People> savedPeople = peopleService.saveAllPeople(peopleList)
