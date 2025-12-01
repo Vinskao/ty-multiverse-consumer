@@ -44,6 +44,8 @@ logging:
     org.springframework.web: @LOGGING_LEVEL_SPRINGFRAMEWORK@
     org.springframework.amqp: @LOGGING_LEVEL_SPRINGFRAMEWORK@
     com.vinskao.ty_multiverse_consumer: @LOGGING_LEVEL@
+  charset:
+    console: UTF-8
 
 # Actuator 配置
 management:
