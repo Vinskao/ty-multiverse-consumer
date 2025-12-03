@@ -115,12 +115,8 @@ pipeline {
                             string(credentialsId: 'KEYCLOAK_AUTH_SERVER_URL', variable: 'KEYCLOAK_AUTH_SERVER_URL'),
                             string(credentialsId: 'PUBLIC_REALM', variable: 'PUBLIC_REALM'),
                             string(credentialsId: 'PUBLIC_CLIENT_ID', variable: 'PUBLIC_CLIENT_ID'),
-                            string(credentialsId: 'KEYCLOAK_CREDENTIALS_SECRET', variable: 'KEYCLOAK_CREDENTIALS_SECRET'),
-                            string(credentialsId: 'RABBITMQ_HOST', variable: 'RABBITMQ_HOST'),
-                            string(credentialsId: 'RABBITMQ_PORT', variable: 'RABBITMQ_PORT'),
-                            string(credentialsId: 'RABBITMQ_USERNAME', variable: 'RABBITMQ_USERNAME'),
-                            string(credentialsId: 'RABBITMQ_PASSWORD', variable: 'RABBITMQ_PASSWORD'),
-                            string(credentialsId: 'RABBITMQ_VIRTUAL_HOST', variable: 'RABBITMQ_VIRTUAL_HOST')
+                            string(credentialsId: 'KEYCLOAK_CREDENTIALS_SECRET', variable: 'KEYCLOAK_CREDENTIALS_SECRET')
+                            // RabbitMQ 配置已從憑證中移除，將在 deployment.yaml 中直接寫死 K8s 服務名稱
                         ]) {
                             sh '''
                                 cat > src/main/resources/env/platform.properties <<EOL
@@ -154,13 +150,13 @@ pipeline {
                                 REDIS_QUEUE_TYMB=${REDIS_QUEUE_TYMB}
                                 # 明确禁用people-datasource
                                 SPRING_DATASOURCE_ENABLED=false
-                                # RabbitMQ 配置 - Production 環境啟用
+                                # RabbitMQ 配置 - Production 環境啟用（使用 K8s 內部服務名稱，寫死）
                                 RABBITMQ_ENABLED=true
-                                RABBITMQ_HOST=${RABBITMQ_HOST}
-                                RABBITMQ_PORT=${RABBITMQ_PORT}
-                                RABBITMQ_USERNAME=${RABBITMQ_USERNAME}
-                                RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
-                                RABBITMQ_VIRTUAL_HOST=${RABBITMQ_VIRTUAL_HOST}
+                                RABBITMQ_HOST=rabbitmq-service
+                                RABBITMQ_PORT=5672
+                                RABBITMQ_USERNAME=admin
+                                RABBITMQ_PASSWORD=admin123
+                                RABBITMQ_VIRTUAL_HOST=/
                                 EOL
                             '''
                         }
