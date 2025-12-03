@@ -103,9 +103,6 @@ pipeline {
                             string(credentialsId: 'SPRING_DATASOURCE_URL', variable: 'SPRING_DATASOURCE_URL'),
                             string(credentialsId: 'SPRING_DATASOURCE_USERNAME', variable: 'SPRING_DATASOURCE_USERNAME'),
                             string(credentialsId: 'SPRING_DATASOURCE_PASSWORD', variable: 'SPRING_DATASOURCE_PASSWORD'),
-                            string(credentialsId: 'SPRING_DATASOURCE_URL', variable: 'SPRING_DATASOURCE_URL'),
-                            string(credentialsId: 'SPRING_DATASOURCE_USERNAME', variable: 'SPRING_DATASOURCE_USERNAME'),
-                            string(credentialsId: 'SPRING_DATASOURCE_PASSWORD', variable: 'SPRING_DATASOURCE_PASSWORD'),
                             string(credentialsId: 'REDIS_HOST', variable: 'REDIS_HOST'),
                             string(credentialsId: 'REDIS_CUSTOM_PORT', variable: 'REDIS_CUSTOM_PORT'),
                             string(credentialsId: 'REDIS_PASSWORD', variable: 'REDIS_PASSWORD'),
@@ -119,45 +116,43 @@ pipeline {
                             // RabbitMQ 配置已從憑證中移除，將在 deployment.yaml 中直接寫死 K8s 服務名稱
                         ]) {
                             sh '''
+                                # 轉換 JDBC URL 為 R2DBC URL
+                                # jdbc:postgresql://host:port/dbname -> r2dbc:postgresql://host:port/dbname
+                                SPRING_R2DBC_URL=$(echo "${SPRING_DATASOURCE_URL}" | sed 's/^jdbc:/r2dbc:/' | sed 's/\\?.*$//')
+                                
                                 cat > src/main/resources/env/platform.properties <<EOL
-                                env=platform
-                                spring.profiles.active=platform
-                                PROJECT_ENV=platform
-                                # Primary datasource configuration
-                                SPRING_DATASOURCE_URL=${SPRING_DATASOURCE_URL}
-                                SPRING_DATASOURCE_USERNAME=${SPRING_DATASOURCE_USERNAME}
-                                SPRING_DATASOURCE_PASSWORD=${SPRING_DATASOURCE_PASSWORD}
-                                # People datasource configuration
-                                SPRING_DATASOURCE_URL=${SPRING_DATASOURCE_URL}
-                                SPRING_DATASOURCE_USERNAME=${SPRING_DATASOURCE_USERNAME}
-                                SPRING_DATASOURCE_PASSWORD=${SPRING_DATASOURCE_PASSWORD}
-                                # People datasource tokens for resource filtering
-                                PEOPLE_DATASOURCE_URL=${SPRING_DATASOURCE_URL}
-                                PEOPLE_DATASOURCE_USERNAME=${SPRING_DATASOURCE_USERNAME}
-                                PEOPLE_DATASOURCE_PASSWORD=${SPRING_DATASOURCE_PASSWORD}
-                                server.port=8081
-                                LOGGING_LEVEL=INFO
-                                LOGGING_LEVEL_SPRINGFRAMEWORK=INFO
-                                PUBLIC_TYMB_URL=${PUBLIC_TYMB_URL}
-                                PUBLIC_FRONTEND_URL=${PUBLIC_FRONTEND_URL}
-                                KEYCLOAK_AUTH_SERVER_URL=${KEYCLOAK_AUTH_SERVER_URL}
-                                PUBLIC_REALM=${PUBLIC_REALM}
-                                PUBLIC_CLIENT_ID=${PUBLIC_CLIENT_ID}
-                                KEYCLOAK_CREDENTIALS_SECRET=${KEYCLOAK_CREDENTIALS_SECRET}
-                                REDIS_HOST=${REDIS_HOST}
-                                REDIS_CUSTOM_PORT=${REDIS_CUSTOM_PORT}
-                                REDIS_PASSWORD=${REDIS_PASSWORD}
-                                REDIS_QUEUE_TYMB=${REDIS_QUEUE_TYMB}
-                                # 明确禁用people-datasource
-                                SPRING_DATASOURCE_ENABLED=false
-                                # RabbitMQ 配置 - Production 環境啟用（使用 K8s 內部服務名稱，寫死）
-                                RABBITMQ_ENABLED=true
-                                RABBITMQ_HOST=rabbitmq-service
-                                RABBITMQ_PORT=5672
-                                RABBITMQ_USERNAME=admin
-                                RABBITMQ_PASSWORD=admin123
-                                RABBITMQ_VIRTUAL_HOST=/
-                                EOL
+env=platform
+spring.profiles.active=platform
+PROJECT_ENV=platform
+# Primary datasource configuration (JDBC URL)
+SPRING_DATASOURCE_URL=${SPRING_DATASOURCE_URL}
+SPRING_DATASOURCE_USERNAME=${SPRING_DATASOURCE_USERNAME}
+SPRING_DATASOURCE_PASSWORD=${SPRING_DATASOURCE_PASSWORD}
+# R2DBC URL (converted from JDBC URL)
+SPRING_R2DBC_URL=${SPRING_R2DBC_URL}
+server.port=8081
+LOGGING_LEVEL=INFO
+LOGGING_LEVEL_SPRINGFRAMEWORK=INFO
+PUBLIC_TYMB_URL=${PUBLIC_TYMB_URL}
+PUBLIC_FRONTEND_URL=${PUBLIC_FRONTEND_URL}
+KEYCLOAK_AUTH_SERVER_URL=${KEYCLOAK_AUTH_SERVER_URL}
+PUBLIC_REALM=${PUBLIC_REALM}
+PUBLIC_CLIENT_ID=${PUBLIC_CLIENT_ID}
+KEYCLOAK_CREDENTIALS_SECRET=${KEYCLOAK_CREDENTIALS_SECRET}
+REDIS_HOST=${REDIS_HOST}
+REDIS_CUSTOM_PORT=${REDIS_CUSTOM_PORT}
+REDIS_PASSWORD=${REDIS_PASSWORD}
+REDIS_QUEUE_TYMB=${REDIS_QUEUE_TYMB}
+# 明确禁用people-datasource
+SPRING_DATASOURCE_ENABLED=false
+# RabbitMQ 配置 - Production 環境啟用（使用 K8s 內部服務名稱，寫死）
+RABBITMQ_ENABLED=true
+RABBITMQ_HOST=rabbitmq-service
+RABBITMQ_PORT=5672
+RABBITMQ_USERNAME=admin
+RABBITMQ_PASSWORD=admin123
+RABBITMQ_VIRTUAL_HOST=/
+EOL
                             '''
                         }
                     }
