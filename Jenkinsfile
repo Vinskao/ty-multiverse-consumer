@@ -116,6 +116,10 @@ pipeline {
                             // RabbitMQ 配置已從憑證中移除，將在 deployment.yaml 中直接寫死 K8s 服務名稱
                         ]) {
                             sh '''
+                                # 轉換 JDBC URL 為 R2DBC URL
+                                # jdbc:postgresql://host:port/dbname -> r2dbc:postgresql://host:port/dbname
+                                SPRING_R2DBC_URL=$(echo "${SPRING_DATASOURCE_URL}" | sed 's/^jdbc:/r2dbc:/' | sed 's/\\?.*$//')
+                                
                                 cat > src/main/resources/env/platform.properties <<EOL
 env=platform
 spring.profiles.active=platform
@@ -124,6 +128,8 @@ PROJECT_ENV=platform
 SPRING_DATASOURCE_URL=${SPRING_DATASOURCE_URL}
 SPRING_DATASOURCE_USERNAME=${SPRING_DATASOURCE_USERNAME}
 SPRING_DATASOURCE_PASSWORD=${SPRING_DATASOURCE_PASSWORD}
+# R2DBC URL (converted from JDBC URL)
+SPRING_R2DBC_URL=${SPRING_R2DBC_URL}
 server.port=8081
 LOGGING_LEVEL=INFO
 LOGGING_LEVEL_SPRINGFRAMEWORK=INFO

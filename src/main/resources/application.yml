@@ -12,9 +12,9 @@ spring:
   config:
     import: optional:classpath:env/${env:local}.properties
   r2dbc:
-    url: r2dbc:postgresql://localhost:5432/peoplesystem
-    username: ${SPRING_DATASOURCE_USERNAME}
-    password: ${SPRING_DATASOURCE_PASSWORD}
+    url: ${SPRING_R2DBC_URL:r2dbc:postgresql://localhost:5432/peoplesystem}
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
+    password: ${SPRING_DATASOURCE_PASSWORD:postgres123}
     pool:
       enabled: true
       initial-size: 1
