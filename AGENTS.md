@@ -311,3 +311,50 @@ GATEWAY_URL=http://localhost:8082
 SPRING_PROFILES_ACTIVE=dev
 LOGGING_LEVEL_COM_TY=DEBUG
 ```
+
+### Database Configuration
+
+#### R2DBC URL Configuration Flow
+
+Consumer 專案使用 R2DBC (Reactive Relational Database Connectivity) 進行資料庫連接。由於 Jenkins credentials 只提供 JDBC 格式的 URL，系統會自動將其轉換為 R2DBC 格式：
+
+```
+Jenkins Credentials
+       │
+       ▼
+SPRING_DATASOURCE_URL = jdbc:postgresql://host:port/dbname?sslmode=require
+       │
+       ▼ (sed 轉換)
+SPRING_R2DBC_URL = r2dbc:postgresql://host:port/dbname
+       │
+       ▼ (寫入 platform.properties)
+       │
+       ▼
+application.yml 讀取 ${SPRING_R2DBC_URL}
+```
+
+#### Configuration Details
+
+**application.yml** 配置：
+```yaml
+spring:
+  r2dbc:
+    url: ${SPRING_R2DBC_URL:r2dbc:postgresql://localhost:5432/peoplesystem}
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
+    password: ${SPRING_DATASOURCE_PASSWORD:postgres123}
+```
+
+**Jenkinsfile URL 轉換**：
+```bash
+# 轉換 JDBC URL 為 R2DBC URL
+# jdbc:postgresql://host:port/dbname -> r2dbc:postgresql://host:port/dbname
+SPRING_R2DBC_URL=$(echo "${SPRING_DATASOURCE_URL}" | sed 's/^jdbc:/r2dbc:/' | sed 's/\\?.*$//')
+```
+
+**轉換邏輯說明**：
+1. `sed 's/^jdbc:/r2dbc:/'` - 將 URL 前綴從 `jdbc:` 替換為 `r2dbc:`
+2. `sed 's/\\?.*$//'` - 移除查詢參數（如 `?sslmode=require`）
+
+**環境差異**：
+- **本地開發**：使用 `application.yml` 中的默認值
+- **生產環境**：從 Jenkins credentials 獲取 JDBC URL，經轉換後寫入 `platform.properties`
