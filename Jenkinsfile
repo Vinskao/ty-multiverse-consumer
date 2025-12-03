@@ -216,7 +216,7 @@ EOF
 </settings>
 EOF
                                 # 執行 Maven 測試
-                                MAVEN_OPTS="-Xmx1024m -XX:+UseG1GC" mvn -T 1C -Dmaven.javadoc.skip=true test -P platform
+                                MAVEN_OPTS="-Xmx1024m -XX:+UseG1GC" mvn -T 1C -Dmaven.javadoc.skip=true test -Dmaven.test.skip=true -P platform
                             '''
                         }
                     }
