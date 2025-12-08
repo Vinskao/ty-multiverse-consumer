@@ -48,6 +48,11 @@ public class ReactiveRabbitMQConfig {
         connectionFactory.setPassword(password);
         connectionFactory.setVirtualHost(virtualHost);
         
+        // 連接超時配置 - 解決網絡延遲導致的 TimeoutException
+        connectionFactory.setConnectionTimeout(30000);  // 連接超時 30 秒（默認 60 秒）
+        connectionFactory.setHandshakeTimeout(30000);   // 握手超時 30 秒（默認 10 秒）
+        connectionFactory.setChannelRpcTimeout(30000);  // Channel RPC 超時 30 秒
+        
         // 連接池配置 - 與 R2DBC 連線池協調
         connectionFactory.setRequestedChannelMax(10);
         connectionFactory.setRequestedFrameMax(131072);
@@ -56,8 +61,9 @@ public class ReactiveRabbitMQConfig {
         // 啟用自動恢復
         connectionFactory.setAutomaticRecoveryEnabled(true);
         connectionFactory.setNetworkRecoveryInterval(5000);
+        connectionFactory.setTopologyRecoveryEnabled(true);  // 啟用拓撲恢復（隊列、交換機等）
         
-        logger.info("✅ 配置 Reactive RabbitMQ 連接工廠: host={}, port={}, virtualHost={}", 
+        logger.info("✅ 配置 Reactive RabbitMQ 連接工廠: host={}, port={}, virtualHost={}, connectionTimeout=30s, handshakeTimeout=30s", 
                    host, port, virtualHost);
         
         return connectionFactory;
