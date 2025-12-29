@@ -15,10 +15,10 @@ pipeline {
                     tty: true
                     resources:
                       requests:
-                        cpu: "100m"
+                        cpu: "50m"
                         memory: "1024Mi"
                       limits:
-                        cpu: "500m"
+                        cpu: "75m"
                         memory: "2048Mi"
                     volumeMounts:
                     - mountPath: /root/.m2
