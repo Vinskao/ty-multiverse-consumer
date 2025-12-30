@@ -61,10 +61,10 @@ spec:
         - containerPort: 8081
         resources:
           requests:
-            cpu: "50m"
+            cpu: "10m"
             memory: "512Mi"
           limits:
-            cpu: "75m"
+            cpu: "50m"
             memory: "1Gi"
         env:
         - name: SERVER_PORT
