@@ -116,9 +116,26 @@ pipeline {
                             // RabbitMQ 配置已從憑證中移除，將在 deployment.yaml 中直接寫死 K8s 服務名稱
                         ]) {
                             sh '''
+                                # 從 JDBC URL 解析出 HOST、PORT、DBNAME
+                                # 格式: jdbc:postgresql://host:port/dbname?params
+                                # 或: jdbc:postgresql://host:port/dbname
+                                
+                                # 移除 jdbc:postgresql:// 前綴和 ? 後面的參數
+                                URL_WITHOUT_PREFIX=$(echo "${SPRING_DATASOURCE_URL}" | sed 's|^jdbc:postgresql://||' | sed 's|?.*$||')
+                                
+                                # 提取 host:port/dbname
+                                # 格式: host:port/dbname
+                                SPRING_DATASOURCE_HOST=$(echo "${URL_WITHOUT_PREFIX}" | cut -d':' -f1)
+                                SPRING_DATASOURCE_PORT=$(echo "${URL_WITHOUT_PREFIX}" | cut -d':' -f2 | cut -d'/' -f1)
+                                SPRING_DATASOURCE_DBNAME=$(echo "${URL_WITHOUT_PREFIX}" | cut -d'/' -f2)
+                                
                                 # 轉換 JDBC URL 為 R2DBC URL
-                                # jdbc:postgresql://host:port/dbname -> r2dbc:postgresql://host:port/dbname
                                 SPRING_R2DBC_URL=$(echo "${SPRING_DATASOURCE_URL}" | sed 's/^jdbc:/r2dbc:/' | sed 's/\\?.*$//')
+                                
+                                echo "Parsed database connection details:"
+                                echo "  HOST: ${SPRING_DATASOURCE_HOST}"
+                                echo "  PORT: ${SPRING_DATASOURCE_PORT}"
+                                echo "  DBNAME: ${SPRING_DATASOURCE_DBNAME}"
                                 
                                 cat > src/main/resources/env/platform.properties <<EOL
 env=platform
@@ -128,6 +145,10 @@ PROJECT_ENV=platform
 SPRING_DATASOURCE_URL=${SPRING_DATASOURCE_URL}
 SPRING_DATASOURCE_USERNAME=${SPRING_DATASOURCE_USERNAME}
 SPRING_DATASOURCE_PASSWORD=${SPRING_DATASOURCE_PASSWORD}
+# Parsed connection details for R2DBC
+SPRING_DATASOURCE_HOST=${SPRING_DATASOURCE_HOST}
+SPRING_DATASOURCE_PORT=${SPRING_DATASOURCE_PORT}
+SPRING_DATASOURCE_DBNAME=${SPRING_DATASOURCE_DBNAME}
 # R2DBC URL (converted from JDBC URL)
 SPRING_R2DBC_URL=${SPRING_R2DBC_URL}
 server.port=8081
@@ -350,6 +371,17 @@ EOF
                                           command -v envsubst >/dev/null 2>&1 || (apk add --no-cache gettext ca-certificates >/dev/null 2>&1 || true)
                                         fi
 
+                                        # Parse database connection details from JDBC URL
+                                        URL_WITHOUT_PREFIX=$(echo "${SPRING_DATASOURCE_URL}" | sed 's|^jdbc:postgresql://||' | sed 's|?.*$||')
+                                        export SPRING_DATASOURCE_HOST=$(echo "${URL_WITHOUT_PREFIX}" | cut -d':' -f1)
+                                        export SPRING_DATASOURCE_PORT=$(echo "${URL_WITHOUT_PREFIX}" | cut -d':' -f2 | cut -d'/' -f1)
+                                        export SPRING_DATASOURCE_DBNAME=$(echo "${URL_WITHOUT_PREFIX}" | cut -d'/' -f2)
+
+                                        echo "Parsed database connection details:"
+                                        echo "  HOST: ${SPRING_DATASOURCE_HOST}"
+                                        echo "  PORT: ${SPRING_DATASOURCE_PORT}"
+                                        echo "  DBNAME: ${SPRING_DATASOURCE_DBNAME}"
+
                                         # In-cluster auth via ServiceAccount (serviceAccountName: jenkins-admin)
                                         kubectl cluster-info
 
@@ -368,7 +400,9 @@ EOF
                                         echo "Recreating deployment ..."
                                         echo "=== Effective sensitive env values ==="
                                         echo "SPRING_DATASOURCE_URL=${SPRING_DATASOURCE_URL}"
-                                        echo "SPRING_DATASOURCE_URL=${SPRING_DATASOURCE_URL}"
+                                        echo "SPRING_DATASOURCE_HOST=${SPRING_DATASOURCE_HOST}"
+                                        echo "SPRING_DATASOURCE_PORT=${SPRING_DATASOURCE_PORT}"
+                                        echo "SPRING_DATASOURCE_DBNAME=${SPRING_DATASOURCE_DBNAME}"
                                         echo "KEYCLOAK_AUTH_SERVER_URL=${KEYCLOAK_AUTH_SERVER_URL}"
                                         echo "REDIS_HOST=${REDIS_HOST}:${REDIS_CUSTOM_PORT}"
 
