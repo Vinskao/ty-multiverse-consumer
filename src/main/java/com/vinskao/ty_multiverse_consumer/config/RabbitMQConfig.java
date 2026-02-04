@@ -13,6 +13,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.amqp.rabbit.config.SimpleRabbitListenerContainerFactory;
 import org.springframework.amqp.rabbit.annotation.EnableRabbit;
+import org.springframework.amqp.rabbit.core.RabbitAdmin;
 import org.springframework.core.task.TaskExecutor;
 
 import java.util.Map;
@@ -21,7 +22,7 @@ import java.util.HashMap;
 @Configuration
 @EnableRabbit
 public class RabbitMQConfig {
-    
+
     // 添加調試日誌
     private static final Logger logger = LoggerFactory.getLogger(RabbitMQConfig.class);
 
@@ -34,7 +35,7 @@ public class RabbitMQConfig {
     public static final String PEOPLE_GET_NAMES_QUEUE = "people-get-names";
     public static final String PEOPLE_DELETE_QUEUE = "people-delete";
     public static final String PEOPLE_DELETE_ALL_QUEUE = "people-delete-all";
-    public static final String PEOPLE_DAMAGE_CALCULATION_QUEUE = "people-damage-calculation";
+    public static final String PEOPLE_DAMAGE_CALCULATION_QUEUE = "damage-calculation"; // 與 Backend 保持一致
 
     // Weapon 隊列名稱
     public static final String WEAPON_GET_ALL_QUEUE = "weapon-get-all";
@@ -47,7 +48,6 @@ public class RabbitMQConfig {
     public static final String WEAPON_EXISTS_QUEUE = "weapon-exists";
     public static final String WEAPON_UPDATE_ATTRIBUTES_QUEUE = "weapon-update-attributes";
     public static final String WEAPON_UPDATE_BASE_DAMAGE_QUEUE = "weapon-update-base-damage";
-
 
     // 交換機名稱
     public static final String MAIN_EXCHANGE = "tymb-exchange";
@@ -75,10 +75,10 @@ public class RabbitMQConfig {
     public static final String WEAPON_EXISTS_ROUTING_KEY = "weapon.exists";
     public static final String WEAPON_UPDATE_ATTRIBUTES_ROUTING_KEY = "weapon.update.attributes";
     public static final String WEAPON_UPDATE_BASE_DAMAGE_ROUTING_KEY = "weapon.update.base.damage";
-    
+
     // 注意：回傳路由鍵和隊列已不再使用，改用 async-result 隊列
     // 保留常量定義以防將來需要向後兼容
-    
+
     // 異步結果隊列
     public static final String ASYNC_RESULT_QUEUE = "async-result";
     public static final String ASYNC_RESULT_ROUTING_KEY = "async.result";
@@ -147,9 +147,9 @@ public class RabbitMQConfig {
                 .withArgument("x-message-ttl", 300000) // 5分鐘 TTL
                 .build();
     }
-    
+
     // 注意：回傳隊列Bean已刪除，不再使用
-    
+
     /**
      * 異步結果隊列
      */
@@ -238,12 +238,12 @@ public class RabbitMQConfig {
     public DirectExchange mainExchange() {
         return new DirectExchange(MAIN_EXCHANGE);
     }
-    
+
     @Bean
     public DirectExchange peopleResponseExchange() {
         return new DirectExchange(PEOPLE_RESPONSE_EXCHANGE);
     }
-    
+
     @Bean
     public DirectExchange weaponResponseExchange() {
         return new DirectExchange(WEAPON_RESPONSE_EXCHANGE);
@@ -312,10 +312,9 @@ public class RabbitMQConfig {
                 .to(mainExchange())
                 .with(PEOPLE_DAMAGE_CALCULATION_ROUTING_KEY);
     }
-    
 
     // 注意：回傳隊列綁定已刪除，不再使用
-    
+
     /**
      * 綁定異步結果隊列到交換機
      */
@@ -325,7 +324,7 @@ public class RabbitMQConfig {
                 .to(mainExchange())
                 .with(ASYNC_RESULT_ROUTING_KEY);
         logger.info("✅ 創建異步結果綁定: 交換機={}, 路由鍵={}, 隊列={}",
-                   MAIN_EXCHANGE, ASYNC_RESULT_ROUTING_KEY, ASYNC_RESULT_QUEUE);
+                MAIN_EXCHANGE, ASYNC_RESULT_ROUTING_KEY, ASYNC_RESULT_QUEUE);
         return binding;
     }
 
@@ -400,7 +399,6 @@ public class RabbitMQConfig {
                 .with(WEAPON_UPDATE_BASE_DAMAGE_ROUTING_KEY);
     }
 
-
     // 配置消息轉換器
     @Bean
     public MessageConverter jsonMessageConverter() {
@@ -409,7 +407,7 @@ public class RabbitMQConfig {
         converter.setClassMapper(classMapper());
         return converter;
     }
-    
+
     /**
      * 配置 ClassMapper 以處理跨項目的類型映射
      * 將 backend 模組的類別名稱映射到 consumer 模組的對應類別
@@ -418,17 +416,17 @@ public class RabbitMQConfig {
     public DefaultClassMapper classMapper() {
         DefaultClassMapper classMapper = new DefaultClassMapper();
         classMapper.setTrustedPackages("*");
-        
+
         // 映射 backend 的 AsyncMessageDTO 到 consumer 的 AsyncMessageDTO
         Map<String, Class<?>> idClassMapping = new HashMap<>();
         idClassMapping.put(
-            "tw.com.tymbackend.core.message.AsyncMessageDTO",
-            com.vinskao.ty_multiverse_consumer.core.dto.AsyncMessageDTO.class
-        );
+                "tw.com.tymbackend.core.message.AsyncMessageDTO",
+                com.vinskao.ty_multiverse_consumer.core.dto.AsyncMessageDTO.class);
         classMapper.setIdClassMapping(idClassMapping);
-        
-        logger.info("✅ 配置 ClassMapper: 映射 tw.com.tymbackend.core.message.AsyncMessageDTO -> com.vinskao.ty_multiverse_consumer.core.dto.AsyncMessageDTO");
-        
+
+        logger.info(
+                "✅ 配置 ClassMapper: 映射 tw.com.tymbackend.core.message.AsyncMessageDTO -> com.vinskao.ty_multiverse_consumer.core.dto.AsyncMessageDTO");
+
         return classMapper;
     }
 
@@ -453,5 +451,17 @@ public class RabbitMQConfig {
         factory.setTaskExecutor(applicationTaskExecutor);
         factory.setMessageConverter(jsonMessageConverter()); // 使用相同的消息轉換器
         return factory;
+    }
+
+    /**
+     * 創建 RabbitAdmin - 負責在 Consumer 啟動時自動建立 Queue、Exchange 和 Binding
+     * 即使 Backend 尚未啟動，也能確保 Consumer 監聽的 Queue 存在
+     */
+    @Bean
+    public RabbitAdmin rabbitAdmin(ConnectionFactory connectionFactory) {
+        RabbitAdmin admin = new RabbitAdmin(connectionFactory);
+        admin.setAutoStartup(true);
+        logger.info("✅ Consumer RabbitAdmin 已創建，將自動建立監聽所需的 Queue 和 Binding");
+        return admin;
     }
 }
