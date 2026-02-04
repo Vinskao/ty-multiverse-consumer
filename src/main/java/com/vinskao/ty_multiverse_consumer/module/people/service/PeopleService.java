@@ -16,6 +16,8 @@ import java.time.LocalDateTime;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.type.TypeReference;
 
 /**
  * 角色服務類
@@ -23,23 +25,26 @@ import org.slf4j.LoggerFactory;
  * 負責角色相關的業務邏輯處理，包括增刪改查等操作。
  */
 @Service
-@Transactional(readOnly = true, noRollbackFor = {IllegalArgumentException.class, EmptyResultDataAccessException.class})
+@Transactional(readOnly = true, noRollbackFor = { IllegalArgumentException.class,
+        EmptyResultDataAccessException.class })
 public class PeopleService {
-    
+
     private static final Logger logger = LoggerFactory.getLogger(PeopleService.class);
 
     private final PeopleRepository peopleRepository;
     private final DatabaseClient databaseClient;
+    private final ObjectMapper objectMapper;
 
     /**
      * 建構函數
      * 
      * @param peopleRepository 角色資料庫操作介面
-     * @param databaseClient R2DBC DatabaseClient
+     * @param databaseClient   R2DBC DatabaseClient
      */
-    public PeopleService(PeopleRepository peopleRepository, DatabaseClient databaseClient) {
+    public PeopleService(PeopleRepository peopleRepository, DatabaseClient databaseClient, ObjectMapper objectMapper) {
         this.peopleRepository = peopleRepository;
         this.databaseClient = databaseClient;
+        this.objectMapper = objectMapper;
     }
 
     /**
@@ -67,8 +72,8 @@ public class PeopleService {
      */
     @Transactional(readOnly = true)
     @Retryable(value = {
-        org.springframework.transaction.CannotCreateTransactionException.class,
-        java.sql.SQLTransientConnectionException.class
+            org.springframework.transaction.CannotCreateTransactionException.class,
+            java.sql.SQLTransientConnectionException.class
     }, maxAttempts = 10)
     public Flux<People> getAllPeopleOptimized() {
         try {
@@ -100,14 +105,14 @@ public class PeopleService {
     public Mono<People> getPeopleByName(String name) {
         logger.debug("查詢角色: name={}", name);
         return peopleRepository.findByNameIgnoreCase(name)
-            .doOnNext(people -> logger.debug("找到角色: name={}", people.getName()))
-            .doOnSuccess(people -> {
-                if (people == null) {
-                    logger.debug("角色不存在: name={}", name);
-                }
-            });
+                .doOnNext(people -> logger.debug("找到角色: name={}", people.getName()))
+                .doOnSuccess(people -> {
+                    if (people == null) {
+                        logger.debug("角色不存在: name={}", name);
+                    }
+                });
     }
-    
+
     /**
      * 根據ID查詢角色
      * 
@@ -162,33 +167,33 @@ public class PeopleService {
         logger.info("開始批量保存角色，總數量: {}", peopleList.size());
 
         return Flux.fromIterable(peopleList)
-            .index()
-            .concatMap(tuple -> {  // 使用 concatMap 順序執行，避免並發導致的事務問題
-                Long index = tuple.getT1();
-                People people = tuple.getT2();
+                .index()
+                .concatMap(tuple -> { // 使用 concatMap 順序執行，避免並發導致的事務問題
+                    Long index = tuple.getT1();
+                    People people = tuple.getT2();
 
-                logger.info("處理第 {} 個角色: name={}", index + 1, people.getName());
+                    logger.info("處理第 {} 個角色: name={}", index + 1, people.getName());
 
-                // 確保基本字段不為 null
-                if (people.getName() == null) {
-                    String errorMsg = String.format("角色名稱為 null，索引: %d", index);
-                    logger.error(errorMsg);
-                    return Mono.error(new IllegalArgumentException(errorMsg));
-                }
+                    // 確保基本字段不為 null
+                    if (people.getName() == null) {
+                        String errorMsg = String.format("角色名稱為 null，索引: %d", index);
+                        logger.error(errorMsg);
+                        return Mono.error(new IllegalArgumentException(errorMsg));
+                    }
 
-                // 設置時間戳
-                if (people.getCreatedAt() == null) {
-                    people.setCreatedAt(LocalDateTime.now());
-                }
-                people.setUpdatedAt(LocalDateTime.now());
+                    // 設置時間戳
+                    if (people.getCreatedAt() == null) {
+                        people.setCreatedAt(LocalDateTime.now());
+                    }
+                    people.setUpdatedAt(LocalDateTime.now());
 
-                // 使用 DatabaseClient 執行完整的 INSERT 語句
-                return insertPeopleWithAllFields(people)
-                    .doOnNext(savedPeople -> logger.info("成功保存角色: name={}, version={}",
-                        people.getName(), savedPeople.getVersion()))
-                    .doOnError(e -> logger.error("保存角色失敗: name={}, error={}", 
-                        people.getName(), e.getMessage(), e));
-            });
+                    // 使用 DatabaseClient 執行完整的 INSERT 語句
+                    return insertPeopleWithAllFields(people)
+                            .doOnNext(savedPeople -> logger.info("成功保存角色: name={}, version={}",
+                                    people.getName(), savedPeople.getVersion()))
+                            .doOnError(e -> logger.error("保存角色失敗: name={}, error={}",
+                                    people.getName(), e.getMessage(), e));
+                });
     }
 
     /**
@@ -199,34 +204,34 @@ public class PeopleService {
      */
     private Mono<People> insertPeopleWithAllFields(People people) {
         String sql = """
-            INSERT INTO people (
-                name_original, code_name, name, physic_power, magic_power, utility_power,
-                dob, race, attributes, gender, ass_size, boobs_size, height_cm, weight_kg,
-                profession, combat, favorite_foods, job, physics, known_as, personality,
-                interest, likes, dislikes, concubine, faction, army_id, army_name,
-                dept_id, dept_name, origin_army_id, origin_army_name, gave_birth,
-                email, age, proxy, base_attributes, bonus_attributes, state_attributes,
-                created_at, updated_at, version
-            ) VALUES (
-                :nameOriginal, :codeName, :name, :physicPower, :magicPower, :utilityPower,
-                :dob, :race, :attributes, :gender, :assSize, :boobsSize, :heightCm, :weightKg,
-                :profession, :combat, :favoriteFoods, :job, :physics, :knownAs, :personality,
-                :interest, :likes, :dislikes, :concubine, :faction, :armyId, :armyName,
-                :deptId, :deptName, :originArmyId, :originArmyName, :gaveBirth,
-                :email, :age, :proxy, :baseAttributes, :bonusAttributes, :stateAttributes,
-                :createdAt, :updatedAt, :version
-            )
-            """;
+                INSERT INTO people (
+                    name_original, code_name, name, physic_power, magic_power, utility_power,
+                    dob, race, attributes, gender, ass_size, boobs_size, height_cm, weight_kg,
+                    profession, combat, favorite_foods, job, physics, known_as, personality,
+                    interest, likes, dislikes, concubine, faction, army_id, army_name,
+                    dept_id, dept_name, origin_army_id, origin_army_name, gave_birth,
+                    email, age, proxy, base_attributes, bonus_attributes, state_attributes,
+                    created_at, updated_at, version
+                ) VALUES (
+                    :nameOriginal, :codeName, :name, :physicPower, :magicPower, :utilityPower,
+                    :dob, :race, :attributes, :gender, :assSize, :boobsSize, :heightCm, :weightKg,
+                    :profession, :combat, :favoriteFoods, :job, :physics, :knownAs, :personality,
+                    :interest, :likes, :dislikes, :concubine, :faction, :armyId, :armyName,
+                    :deptId, :deptName, :originArmyId, :originArmyName, :gaveBirth,
+                    :email, :age, :proxy, :baseAttributes, :bonusAttributes, :stateAttributes,
+                    :createdAt, :updatedAt, :version
+                )
+                """;
 
         DatabaseClient.GenericExecuteSpec spec = databaseClient.sql(sql);
-        
+
         // 打印調試信息
         logger.debug("準備綁定字段值:");
-        logger.debug("  codeName={}, dob={}, race={}, gender={}", 
-            people.getCodeName(), people.getDob(), people.getRace(), people.getGender());
-        logger.debug("  profession={}, job={}, physics={}, email={}", 
-            people.getProfession(), people.getJob(), people.getPhysics(), people.getEmail());
-        
+        logger.debug("  codeName={}, dob={}, race={}, gender={}",
+                people.getCodeName(), people.getDob(), people.getRace(), people.getGender());
+        logger.debug("  profession={}, job={}, physics={}, email={}",
+                people.getProfession(), people.getJob(), people.getPhysics(), people.getEmail());
+
         // 綁定所有字段，處理 null 值
         spec = bindValue(spec, "nameOriginal", people.getNameOriginal(), String.class);
         spec = bindValue(spec, "codeName", people.getCodeName(), String.class);
@@ -272,20 +277,20 @@ public class PeopleService {
         spec = bindValue(spec, "version", people.getVersion() != null ? people.getVersion() : 0L, Long.class);
 
         return spec.fetch()
-            .rowsUpdated()
-            .thenReturn(people)
-            .doOnSuccess(p -> logger.debug("DatabaseClient INSERT 成功: name={}", p.getName()))
-            .doOnError(e -> logger.error("DatabaseClient INSERT 失敗: name={}, error={}", 
-                people.getName(), e.getMessage(), e));
+                .rowsUpdated()
+                .thenReturn(people)
+                .doOnSuccess(p -> logger.debug("DatabaseClient INSERT 成功: name={}", p.getName()))
+                .doOnError(e -> logger.error("DatabaseClient INSERT 失敗: name={}, error={}",
+                        people.getName(), e.getMessage(), e));
     }
 
     /**
      * 輔助方法：綁定參數值，處理 null 值
      */
     private <T> DatabaseClient.GenericExecuteSpec bindValue(
-            DatabaseClient.GenericExecuteSpec spec, 
-            String name, 
-            T value, 
+            DatabaseClient.GenericExecuteSpec spec,
+            String name,
+            T value,
             Class<T> type) {
         if (value == null) {
             return spec.bindNull(name, type);
@@ -309,7 +314,7 @@ public class PeopleService {
     public Mono<Void> deleteAllPeople() {
         return deleteAll();
     }
-    
+
     /**
      * 刪除所有角色 - Reactive 版本，返回刪除數量
      * 
@@ -318,41 +323,39 @@ public class PeopleService {
     @Transactional(readOnly = false)
     public Mono<Long> deleteAllPeopleReactive() {
         return peopleRepository.count()
-            .flatMap(count -> 
-                peopleRepository.deleteAll()
-                    .then(Mono.just(count))
-            );
+                .flatMap(count -> peopleRepository.deleteAll()
+                        .then(Mono.just(count)));
     }
 
     /**
      * 更新角色
      * 
-     * @param name 角色名稱
+     * @param name   角色名稱
      * @param person 要更新的角色資訊
      * @return 更新後的角色，如果不存在則返回空
      */
     @Transactional(readOnly = false)
     public Mono<People> update(String name, People person) {
         return peopleRepository.findById(name)
-            .flatMap(existing -> {
-                updatePeopleFields(existing, person);
-                if (existing.getVersion() == null) {
-                    existing.setVersion(0L);
-                }
-                return peopleRepository.save(existing);
-            })
-            .switchIfEmpty(Mono.defer(() -> {
-                // 如果不存在，插入新實體（UPSERT 行為）
-                person.setName(name);
-                if (person.getVersion() == null) {
-                    person.setVersion(0L);
-                }
-                if (person.getCreatedAt() == null) {
-                    person.setCreatedAt(LocalDateTime.now());
-                }
-                person.setUpdatedAt(LocalDateTime.now());
-                return peopleRepository.save(person);
-            }));
+                .flatMap(existing -> {
+                    updatePeopleFields(existing, person);
+                    if (existing.getVersion() == null) {
+                        existing.setVersion(0L);
+                    }
+                    return peopleRepository.save(existing);
+                })
+                .switchIfEmpty(Mono.defer(() -> {
+                    // 如果不存在，插入新實體（UPSERT 行為）
+                    person.setName(name);
+                    if (person.getVersion() == null) {
+                        person.setVersion(0L);
+                    }
+                    if (person.getCreatedAt() == null) {
+                        person.setCreatedAt(LocalDateTime.now());
+                    }
+                    person.setUpdatedAt(LocalDateTime.now());
+                    return peopleRepository.save(person);
+                }));
     }
 
     /**
@@ -365,27 +368,27 @@ public class PeopleService {
     public Mono<People> updatePerson(People person) {
         if (person.getName() != null) {
             return peopleRepository.findById(person.getName())
-                .flatMap(existing -> {
-                    // 更新所有非空字段
-                    updatePeopleFields(existing, person);
-                    // 若歷史資料 version 為 null，初始化為 0
-                    if (existing.getVersion() == null) {
-                        existing.setVersion(0L);
-                    }
-                    // 保存並返回
-                    return peopleRepository.save(existing);
-                })
-                .switchIfEmpty(Mono.defer(() -> {
-                    // 若不存在，改為插入（UPSERT 行為）
-                    if (person.getVersion() == null) {
-                        person.setVersion(0L);
-                    }
-                    if (person.getCreatedAt() == null) {
-                        person.setCreatedAt(LocalDateTime.now());
-                    }
-                    person.setUpdatedAt(LocalDateTime.now());
-                    return peopleRepository.save(person);
-                }));
+                    .flatMap(existing -> {
+                        // 更新所有非空字段
+                        updatePeopleFields(existing, person);
+                        // 若歷史資料 version 為 null，初始化為 0
+                        if (existing.getVersion() == null) {
+                            existing.setVersion(0L);
+                        }
+                        // 保存並返回
+                        return peopleRepository.save(existing);
+                    })
+                    .switchIfEmpty(Mono.defer(() -> {
+                        // 若不存在，改為插入（UPSERT 行為）
+                        if (person.getVersion() == null) {
+                            person.setVersion(0L);
+                        }
+                        if (person.getCreatedAt() == null) {
+                            person.setCreatedAt(LocalDateTime.now());
+                        }
+                        person.setUpdatedAt(LocalDateTime.now());
+                        return peopleRepository.save(person);
+                    }));
         } else {
             return Mono.error(new RuntimeException("Character name is required for update"));
         }
@@ -395,49 +398,88 @@ public class PeopleService {
      * 更新 People 實體的字段
      * 
      * @param existing 現有實體
-     * @param updated 包含更新數據的實體
+     * @param updated  包含更新數據的實體
      */
     private void updatePeopleFields(People existing, People updated) {
-        if (updated.getNameOriginal() != null) existing.setNameOriginal(updated.getNameOriginal());
-        if (updated.getCodeName() != null) existing.setCodeName(updated.getCodeName());
-        if (updated.getPhysicPower() != null) existing.setPhysicPower(updated.getPhysicPower());
-        if (updated.getMagicPower() != null) existing.setMagicPower(updated.getMagicPower());
-        if (updated.getUtilityPower() != null) existing.setUtilityPower(updated.getUtilityPower());
-        if (updated.getDob() != null) existing.setDob(updated.getDob());
-        if (updated.getRace() != null) existing.setRace(updated.getRace());
-        if (updated.getAttributes() != null) existing.setAttributes(updated.getAttributes());
-        if (updated.getGender() != null) existing.setGender(updated.getGender());
-        if (updated.getAssSize() != null) existing.setAssSize(updated.getAssSize());
-        if (updated.getBoobsSize() != null) existing.setBoobsSize(updated.getBoobsSize());
-        if (updated.getHeightCm() != null) existing.setHeightCm(updated.getHeightCm());
-        if (updated.getWeightKg() != null) existing.setWeightKg(updated.getWeightKg());
-        if (updated.getProfession() != null) existing.setProfession(updated.getProfession());
-        if (updated.getCombat() != null) existing.setCombat(updated.getCombat());
-        if (updated.getFavoriteFoods() != null) existing.setFavoriteFoods(updated.getFavoriteFoods());
-        if (updated.getJob() != null) existing.setJob(updated.getJob());
-        if (updated.getPhysics() != null) existing.setPhysics(updated.getPhysics());
-        if (updated.getKnownAs() != null) existing.setKnownAs(updated.getKnownAs());
-        if (updated.getPersonality() != null) existing.setPersonality(updated.getPersonality());
-        if (updated.getInterest() != null) existing.setInterest(updated.getInterest());
-        if (updated.getLikes() != null) existing.setLikes(updated.getLikes());
-        if (updated.getDislikes() != null) existing.setDislikes(updated.getDislikes());
-        if (updated.getConcubine() != null) existing.setConcubine(updated.getConcubine());
-        if (updated.getFaction() != null) existing.setFaction(updated.getFaction());
-        if (updated.getArmyId() != null) existing.setArmyId(updated.getArmyId());
-        if (updated.getArmyName() != null) existing.setArmyName(updated.getArmyName());
-        if (updated.getDeptId() != null) existing.setDeptId(updated.getDeptId());
-        if (updated.getDeptName() != null) existing.setDeptName(updated.getDeptName());
-        if (updated.getOriginArmyId() != null) existing.setOriginArmyId(updated.getOriginArmyId());
-        if (updated.getOriginArmyName() != null) existing.setOriginArmyName(updated.getOriginArmyName());
-        if (updated.getGaveBirth() != null) existing.setGaveBirth(updated.getGaveBirth());
-        if (updated.getEmail() != null) existing.setEmail(updated.getEmail());
-        if (updated.getAge() != null) existing.setAge(updated.getAge());
-        if (updated.getProxy() != null) existing.setProxy(updated.getProxy());
-        if (updated.getBaseAttributes() != null) existing.setBaseAttributes(updated.getBaseAttributes());
-        if (updated.getBonusAttributes() != null) existing.setBonusAttributes(updated.getBonusAttributes());
-        if (updated.getStateAttributes() != null) existing.setStateAttributes(updated.getStateAttributes());
-        if (updated.getEmbedding() != null) existing.setEmbedding(updated.getEmbedding());
-        
+        if (updated.getNameOriginal() != null)
+            existing.setNameOriginal(updated.getNameOriginal());
+        if (updated.getCodeName() != null)
+            existing.setCodeName(updated.getCodeName());
+        if (updated.getPhysicPower() != null)
+            existing.setPhysicPower(updated.getPhysicPower());
+        if (updated.getMagicPower() != null)
+            existing.setMagicPower(updated.getMagicPower());
+        if (updated.getUtilityPower() != null)
+            existing.setUtilityPower(updated.getUtilityPower());
+        if (updated.getDob() != null)
+            existing.setDob(updated.getDob());
+        if (updated.getRace() != null)
+            existing.setRace(updated.getRace());
+        if (updated.getAttributes() != null)
+            existing.setAttributes(updated.getAttributes());
+        if (updated.getGender() != null)
+            existing.setGender(updated.getGender());
+        if (updated.getAssSize() != null)
+            existing.setAssSize(updated.getAssSize());
+        if (updated.getBoobsSize() != null)
+            existing.setBoobsSize(updated.getBoobsSize());
+        if (updated.getHeightCm() != null)
+            existing.setHeightCm(updated.getHeightCm());
+        if (updated.getWeightKg() != null)
+            existing.setWeightKg(updated.getWeightKg());
+        if (updated.getProfession() != null)
+            existing.setProfession(updated.getProfession());
+        if (updated.getCombat() != null)
+            existing.setCombat(updated.getCombat());
+        if (updated.getFavoriteFoods() != null)
+            existing.setFavoriteFoods(updated.getFavoriteFoods());
+        if (updated.getJob() != null)
+            existing.setJob(updated.getJob());
+        if (updated.getPhysics() != null)
+            existing.setPhysics(updated.getPhysics());
+        if (updated.getKnownAs() != null)
+            existing.setKnownAs(updated.getKnownAs());
+        if (updated.getPersonality() != null)
+            existing.setPersonality(updated.getPersonality());
+        if (updated.getInterest() != null)
+            existing.setInterest(updated.getInterest());
+        if (updated.getLikes() != null)
+            existing.setLikes(updated.getLikes());
+        if (updated.getDislikes() != null)
+            existing.setDislikes(updated.getDislikes());
+        if (updated.getConcubine() != null)
+            existing.setConcubine(updated.getConcubine());
+        if (updated.getFaction() != null)
+            existing.setFaction(updated.getFaction());
+        if (updated.getArmyId() != null)
+            existing.setArmyId(updated.getArmyId());
+        if (updated.getArmyName() != null)
+            existing.setArmyName(updated.getArmyName());
+        if (updated.getDeptId() != null)
+            existing.setDeptId(updated.getDeptId());
+        if (updated.getDeptName() != null)
+            existing.setDeptName(updated.getDeptName());
+        if (updated.getOriginArmyId() != null)
+            existing.setOriginArmyId(updated.getOriginArmyId());
+        if (updated.getOriginArmyName() != null)
+            existing.setOriginArmyName(updated.getOriginArmyName());
+        if (updated.getGaveBirth() != null)
+            existing.setGaveBirth(updated.getGaveBirth());
+        if (updated.getEmail() != null)
+            existing.setEmail(updated.getEmail());
+        if (updated.getAge() != null)
+            existing.setAge(updated.getAge());
+        if (updated.getProxy() != null)
+            existing.setProxy(updated.getProxy());
+        if (updated.getBaseAttributes() != null)
+            existing.setBaseAttributes(updated.getBaseAttributes());
+        if (updated.getBonusAttributes() != null)
+            existing.setBonusAttributes(updated.getBonusAttributes());
+        if (updated.getStateAttributes() != null)
+            existing.setStateAttributes(updated.getStateAttributes());
+        if (updated.getEmbedding() != null)
+            existing.setEmbedding(updated.getEmbedding());
+
         // 更新時間戳
         existing.setUpdatedAt(LocalDateTime.now());
     }
@@ -445,41 +487,41 @@ public class PeopleService {
     /**
      * 更新角色屬性
      * 
-     * @param name 角色名稱
+     * @param name   角色名稱
      * @param person 包含新屬性的角色
      * @return 更新後的角色，如果不存在則返回空
      */
     @Transactional(readOnly = false)
     public Mono<People> updateAttributes(String name, People person) {
         return peopleRepository.findById(name)
-            .flatMap(existing -> {
-                // 如果存在，只更新屬性欄位
-                existing.setBaseAttributes(person.getBaseAttributes());
-                existing.setBonusAttributes(person.getBonusAttributes());
-                existing.setStateAttributes(person.getStateAttributes());
-                existing.setUpdatedAt(LocalDateTime.now());
-                if (existing.getVersion() == null) {
-                    existing.setVersion(0L);
-                }
-                return peopleRepository.save(existing);
-            })
-            .switchIfEmpty(Mono.defer(() -> {
-                // 如果不存在，建立新實體並設定屬性（UPSERT 行為）
-                People newPerson = new People();
-                newPerson.setName(name);
-                newPerson.setBaseAttributes(person.getBaseAttributes());
-                newPerson.setBonusAttributes(person.getBonusAttributes());
-                newPerson.setStateAttributes(person.getStateAttributes());
-                newPerson.setVersion(0L);
-                newPerson.setCreatedAt(LocalDateTime.now());
-                newPerson.setUpdatedAt(LocalDateTime.now());
-                return peopleRepository.save(newPerson);
-            }));
+                .flatMap(existing -> {
+                    // 如果存在，只更新屬性欄位
+                    existing.setBaseAttributes(person.getBaseAttributes());
+                    existing.setBonusAttributes(person.getBonusAttributes());
+                    existing.setStateAttributes(person.getStateAttributes());
+                    existing.setUpdatedAt(LocalDateTime.now());
+                    if (existing.getVersion() == null) {
+                        existing.setVersion(0L);
+                    }
+                    return peopleRepository.save(existing);
+                })
+                .switchIfEmpty(Mono.defer(() -> {
+                    // 如果不存在，建立新實體並設定屬性（UPSERT 行為）
+                    People newPerson = new People();
+                    newPerson.setName(name);
+                    newPerson.setBaseAttributes(person.getBaseAttributes());
+                    newPerson.setBonusAttributes(person.getBonusAttributes());
+                    newPerson.setStateAttributes(person.getStateAttributes());
+                    newPerson.setVersion(0L);
+                    newPerson.setCreatedAt(LocalDateTime.now());
+                    newPerson.setUpdatedAt(LocalDateTime.now());
+                    return peopleRepository.save(newPerson);
+                }));
     }
 
     // Note: R2DBC doesn't support Specification and Pageable
     // For advanced querying, use custom @Query methods with SQL
-    
+
     /**
      * 獲取所有角色名稱
      *
@@ -510,7 +552,47 @@ public class PeopleService {
     public Flux<People> findByAttributes(List<String> attributes) {
         // ✅ 優化：使用 reactive flatMap 處理多個屬性查詢
         return Flux.fromIterable(attributes)
-            .flatMap(attr -> peopleRepository.findByAttributeContaining(attr))
-            .distinct(); // 移除重複結果
+                .flatMap(attr -> peopleRepository.findByAttributeContaining(attr))
+                .distinct(); // 移除重複結果
+    }
+
+    /**
+     * 從物件轉換並插入角色
+     */
+    @Transactional(readOnly = false)
+    public Mono<People> insertPersonFromObject(Object payload) {
+        return Mono.fromCallable(() -> objectMapper.convertValue(payload, People.class))
+            .flatMap(this::insertPerson);
+    }
+
+    /**
+     * 從物件轉換並更新角色
+     */
+    @Transactional(readOnly = false)
+    public Mono<People> updatePersonFromObject(Object payload) {
+        return Mono.fromCallable(() -> objectMapper.convertValue(payload, People.class))
+            .flatMap(this::updatePerson);
+    }
+
+    /**
+     * 從物件轉換並批量插入角色
+     */
+    @Transactional(readOnly = false)
+    public Flux<People> insertMultiplePeopleFromObject(Object payload) {
+        return Mono.fromCallable(() -> 
+            objectMapper.convertValue(payload, new com.fasterxml.jackson.core.type.TypeReference<List<People>>() {})
+        ).flatMapMany(this::saveAllPeople);
+    }
+
+    /**
+     * 計算武器傷害
+     */
+    public Mono<Integer> calculateDamageWithWeapon(String characterName) {
+        return getPeopleByName(characterName)
+            .map(p -> {
+                int base = (p.getPhysicPower() != null ? p.getPhysicPower() : 10);
+                return base + 5; // 簡易版計算
+            })
+            .defaultIfEmpty(15);
     }
 }

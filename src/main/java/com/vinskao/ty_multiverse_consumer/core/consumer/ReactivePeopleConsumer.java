@@ -57,12 +57,17 @@ public class ReactivePeopleConsumer {
     @PostConstruct
     public void startConsumers() {
         logger.info("🚀 啟動 Reactive People Consumer...");
-        
+
         // 啟動各個隊列的消費者
         startGetAllPeopleConsumer();
+        startGetPeopleNamesConsumer();
         startGetPeopleByNameConsumer();
+        startPeopleInsertConsumer();
+        startPeopleUpdateConsumer();
+        startPeopleInsertMultipleConsumer();
         startDeleteAllPeopleConsumer();
-        
+        startDamageCalculationConsumer();
+
         logger.info("✅ Reactive People Consumer 啟動完成");
     }
 
@@ -73,13 +78,27 @@ public class ReactivePeopleConsumer {
      */
     private void startGetAllPeopleConsumer() {
         reactiveReceiver
-            .consumeManualAck(RabbitMQConfig.PEOPLE_GET_ALL_QUEUE, new ConsumeOptions().qos(2))
-            .flatMap(this::handleGetAllPeople, 2) // 並發控制：最多2個並發處理
-            .doOnError(error -> logger.error("❌ People Get-All 消費者發生錯誤", error))
-            .retry() // 自動重試
-            .subscribe();
-        
+                .consumeManualAck(RabbitMQConfig.PEOPLE_GET_ALL_QUEUE, new ConsumeOptions().qos(2))
+                .flatMap(this::handleGetAllPeople, 2) // 並發控制：最多2個並發處理
+                .doOnError(error -> logger.error("❌ People Get-All 消費者發生錯誤", error))
+                .retry() // 自動重試
+                .subscribe();
+
         logger.info("📡 啟動 People Get-All Reactive Consumer (concurrency=2, prefetch=2)");
+    }
+
+    /**
+     * People Get-Names 消費者
+     */
+    private void startGetPeopleNamesConsumer() {
+        reactiveReceiver
+                .consumeManualAck(RabbitMQConfig.PEOPLE_GET_NAMES_QUEUE, new ConsumeOptions().qos(2))
+                .flatMap(this::handleGetPeopleNames, 2)
+                .doOnError(error -> logger.error("❌ People Get-Names 消費者發生錯誤", error))
+                .retry()
+                .subscribe();
+
+        logger.info("📡 啟動 People Get-Names Reactive Consumer (concurrency=2)");
     }
 
     /**
@@ -87,12 +106,12 @@ public class ReactivePeopleConsumer {
      */
     private void startGetPeopleByNameConsumer() {
         reactiveReceiver
-            .consumeManualAck(RabbitMQConfig.PEOPLE_GET_BY_NAME_QUEUE, new ConsumeOptions().qos(2))
-            .flatMap(this::handleGetPeopleByName, 2)
-            .doOnError(error -> logger.error("❌ People Get-By-Name 消費者發生錯誤", error))
-            .retry()
-            .subscribe();
-        
+                .consumeManualAck(RabbitMQConfig.PEOPLE_GET_BY_NAME_QUEUE, new ConsumeOptions().qos(2))
+                .flatMap(this::handleGetPeopleByName, 2)
+                .doOnError(error -> logger.error("❌ People Get-By-Name 消費者發生錯誤", error))
+                .retry()
+                .subscribe();
+
         logger.info("📡 啟動 People Get-By-Name Reactive Consumer (concurrency=2)");
     }
 
@@ -101,13 +120,69 @@ public class ReactivePeopleConsumer {
      */
     private void startDeleteAllPeopleConsumer() {
         reactiveReceiver
-            .consumeManualAck(RabbitMQConfig.PEOPLE_DELETE_ALL_QUEUE, new ConsumeOptions().qos(1))
-            .flatMap(this::handleDeleteAllPeople, 1) // 刪除操作序列化處理
-            .doOnError(error -> logger.error("❌ People Delete-All 消費者發生錯誤", error))
-            .retry()
-            .subscribe();
-        
+                .consumeManualAck(RabbitMQConfig.PEOPLE_DELETE_ALL_QUEUE, new ConsumeOptions().qos(1))
+                .flatMap(this::handleDeleteAllPeople, 1) // 刪除操作序列化處理
+                .doOnError(error -> logger.error("❌ People Delete-All 消費者發生錯誤", error))
+                .retry()
+                .subscribe();
+
         logger.info("📡 啟動 People Delete-All Reactive Consumer (concurrency=1)");
+    }
+
+    /**
+     * People Insert 消費者
+     */
+    private void startPeopleInsertConsumer() {
+        reactiveReceiver
+                .consumeManualAck(RabbitMQConfig.PEOPLE_INSERT_QUEUE, new ConsumeOptions().qos(2))
+                .flatMap(this::handlePeopleInsert, 2)
+                .doOnError(error -> logger.error("❌ People Insert 消費者發生錯誤", error))
+                .retry()
+                .subscribe();
+
+        logger.info("📡 啟動 People Insert Reactive Consumer (concurrency=2)");
+    }
+
+    /**
+     * People Update 消費者
+     */
+    private void startPeopleUpdateConsumer() {
+        reactiveReceiver
+                .consumeManualAck(RabbitMQConfig.PEOPLE_UPDATE_QUEUE, new ConsumeOptions().qos(2))
+                .flatMap(this::handlePeopleUpdate, 2)
+                .doOnError(error -> logger.error("❌ People Update 消費者發生錯誤", error))
+                .retry()
+                .subscribe();
+
+        logger.info("📡 啟動 People Update Reactive Consumer (concurrency=2)");
+    }
+
+    /**
+     * People Insert-Multiple 消費者
+     */
+    private void startPeopleInsertMultipleConsumer() {
+        reactiveReceiver
+                .consumeManualAck(RabbitMQConfig.PEOPLE_INSERT_MULTIPLE_QUEUE, new ConsumeOptions().qos(1))
+                .flatMap(this::handlePeopleInsertMultiple, 1)
+                .doOnError(error -> logger.error("❌ People Insert-Multiple 消費者發生錯誤", error))
+                .retry()
+                .subscribe();
+
+        logger.info("📡 啟動 People Insert-Multiple Reactive Consumer (concurrency=1)");
+    }
+
+    /**
+     * People Damage Calculation 消費者
+     */
+    private void startDamageCalculationConsumer() {
+        reactiveReceiver
+                .consumeManualAck(RabbitMQConfig.PEOPLE_DAMAGE_CALCULATION_QUEUE, new ConsumeOptions().qos(5))
+                .flatMap(this::handleDamageCalculation, 5)
+                .doOnError(error -> logger.error("❌ People Damage Calculation 消費者發生錯誤", error))
+                .retry()
+                .subscribe();
+
+        logger.info("📡 啟動 People Damage Calculation Reactive Consumer (concurrency=5)");
     }
 
     /**
@@ -115,65 +190,73 @@ public class ReactivePeopleConsumer {
      */
     private Mono<Void> handleGetAllPeople(AcknowledgableDelivery delivery) {
         String messageJson = new String(delivery.getBody());
-        
+
         return Mono.fromCallable(() -> {
-                logger.info("🎯 收到 People Get-All 請求: {}", messageJson);
-                return objectMapper.readValue(messageJson, AsyncMessageDTO.class);
-            })
-            .flatMap(message -> {
-                String requestId = message.getRequestId();
-                logger.info("📝 處理請求: requestId={}", requestId);
-                
-                // 嘗試快取與冪等
-                String idempotentKey = "idempotent:people:getAll:" + requestId;
-                String cacheKey = "people:getAll";
+            logger.info("🎯 收到 People Get-All 請求: {}", messageJson);
+            return objectMapper.readValue(messageJson, AsyncMessageDTO.class);
+        })
+                .flatMap(message -> {
+                    String requestId = message.getRequestId();
+                    logger.info("📝 處理請求: requestId={}", requestId);
 
-                Mono<Void> cachedFlow = (redisService == null ? Mono.<String>empty() : redisService.get(cacheKey))
-                    .flatMap(cached -> {
-                        if (cached != null) {
-                            logger.info("🗃️ 命中快取: {}", cacheKey);
-                            return asyncResultService.sendCompletedResultReactive(requestId, cached);
-                        }
-                        return Mono.empty();
-                    });
+                    // 嘗試快取與冪等
+                    String idempotentKey = "idempotent:people:getAll:" + requestId;
+                    String cacheKey = "people:getAll";
 
-                Mono<Void> queryFlow = peopleService.getAllPeopleOptimized()
-                    .collectList()
-                    .flatMap(peopleList -> {
-                        logger.info("✅ 查詢完成: 共 {} 個角色, requestId={}", peopleList.size(), requestId);
-                        Mono<Void> cacheWrite = (redisService == null)
-                                ? Mono.empty()
-                                : Mono.fromCallable(() -> objectMapper.writeValueAsString(peopleList))
-                                    .flatMap(json -> redisService.set(cacheKey, json, Duration.ofSeconds(60)).then());
-                        Mono<Boolean> idemSet = (redisService == null)
-                                ? Mono.just(true)
-                                : redisService.setIfAbsent(idempotentKey, "1", Duration.ofMinutes(5));
-                        return idemSet.then(cacheWrite).then(asyncResultService.sendCompletedResultReactive(requestId, peopleList));
-                    })
-                    .onErrorResume(e -> asyncResultService.sendFailedResultReactive(requestId, "獲取角色列表失敗: " + e.getMessage()));
+                    Mono<Void> cachedFlow = (redisService == null ? Mono.<String>empty() : redisService.get(cacheKey))
+                            .flatMap(cached -> {
+                                if (cached != null) {
+                                    logger.info("🗃️ 命中快取: {}", cacheKey);
+                                    return asyncResultService.sendCompletedResultReactive(requestId, cached);
+                                }
+                                return Mono.empty();
+                            });
 
-                return (redisService == null ? Mono.empty() : redisService.setIfAbsent(idempotentKey, "1", Duration.ofMinutes(5)).flatMap(set -> set ? Mono.empty() : Mono.just(false)))
-                    .flatMap(alreadyProcessed -> alreadyProcessed.equals(Boolean.FALSE) ? cachedFlow : queryFlow)
-                    .switchIfEmpty(cachedFlow.switchIfEmpty(queryFlow))
-                    .doOnSuccess(v -> {
-                        logger.info("🎉 People Get-All 處理完成: requestId={}", requestId);
-                        delivery.ack(); // 手動 ACK
-                    })
-                    .doOnError(error -> {
-                        logger.error("❌ People Get-All 處理失敗: requestId={}, error={}", requestId, error.getMessage());
-                        
-                        // 發送錯誤結果
-                        asyncResultService.sendFailedResultReactive(requestId, "獲取角色列表失敗: " + error.getMessage())
-                            .doFinally(signalType -> delivery.nack(false)) // 手動 NACK，不重新入隊
-                            .subscribe();
-                    });
-            })
-            .onErrorResume(parseError -> {
-                logger.error("❌ 無法解析消息: {}, error={}", messageJson, parseError.getMessage());
-                delivery.nack(false); // 解析錯誤，不重新入隊
-                return Mono.empty();
-            })
-            .then();
+                    Mono<Void> queryFlow = peopleService.getAllPeopleOptimized()
+                            .collectList()
+                            .flatMap(peopleList -> {
+                                logger.info("✅ 查詢完成: 共 {} 個角色, requestId={}", peopleList.size(), requestId);
+                                Mono<Void> cacheWrite = (redisService == null)
+                                        ? Mono.empty()
+                                        : Mono.fromCallable(() -> objectMapper.writeValueAsString(peopleList))
+                                                .flatMap(json -> redisService
+                                                        .set(cacheKey, json, Duration.ofSeconds(60)).then());
+                                Mono<Boolean> idemSet = (redisService == null)
+                                        ? Mono.just(true)
+                                        : redisService.setIfAbsent(idempotentKey, "1", Duration.ofMinutes(5));
+                                return idemSet.then(cacheWrite)
+                                        .then(asyncResultService.sendCompletedResultReactive(requestId, peopleList));
+                            })
+                            .onErrorResume(e -> asyncResultService.sendFailedResultReactive(requestId,
+                                    "獲取角色列表失敗: " + e.getMessage()));
+
+                    return (redisService == null ? Mono.empty()
+                            : redisService.setIfAbsent(idempotentKey, "1", Duration.ofMinutes(5))
+                                    .flatMap(set -> set ? Mono.empty() : Mono.just(false)))
+                            .flatMap(
+                                    alreadyProcessed -> alreadyProcessed.equals(Boolean.FALSE) ? cachedFlow : queryFlow)
+                            .switchIfEmpty(cachedFlow.switchIfEmpty(queryFlow))
+                            .doOnSuccess(v -> {
+                                logger.info("🎉 People Get-All 處理完成: requestId={}", requestId);
+                                delivery.ack(); // 手動 ACK
+                            })
+                            .doOnError(error -> {
+                                logger.error("❌ People Get-All 處理失敗: requestId={}, error={}", requestId,
+                                        error.getMessage());
+
+                                // 發送錯誤結果
+                                asyncResultService
+                                        .sendFailedResultReactive(requestId, "獲取角色列表失敗: " + error.getMessage())
+                                        .doFinally(signalType -> delivery.nack(false)) // 手動 NACK，不重新入隊
+                                        .subscribe();
+                            });
+                })
+                .onErrorResume(parseError -> {
+                    logger.error("❌ 無法解析消息: {}, error={}", messageJson, parseError.getMessage());
+                    delivery.nack(false); // 解析錯誤，不重新入隊
+                    return Mono.empty();
+                })
+                .then();
     }
 
     /**
@@ -181,61 +264,63 @@ public class ReactivePeopleConsumer {
      */
     private Mono<Void> handleGetPeopleByName(AcknowledgableDelivery delivery) {
         String messageJson = new String(delivery.getBody());
-        
+
         return Mono.fromCallable(() -> {
-                logger.info("🎯 收到 People Get-By-Name 請求: {}", messageJson);
-                return objectMapper.readValue(messageJson, AsyncMessageDTO.class);
-            })
-            .flatMap(message -> {
-                String requestId = message.getRequestId();
-                String name = (String) message.getPayload();
-                logger.info("📝 處理請求: name={}, requestId={}", name, requestId);
-                
-                String cacheKey = "people:getByName:" + name;
-                Mono<Void> cachedFlow = (redisService == null ? Mono.<String>empty() : redisService.get(cacheKey))
-                    .flatMap(cached -> {
-                        if (cached != null) {
-                            logger.info("🗃️ 命中快取: {}", cacheKey);
-                            return asyncResultService.sendCompletedResultReactive(requestId, cached);
-                        }
-                        return Mono.empty();
-                    });
+            logger.info("🎯 收到 People Get-By-Name 請求: {}", messageJson);
+            return objectMapper.readValue(messageJson, AsyncMessageDTO.class);
+        })
+                .flatMap(message -> {
+                    String requestId = message.getRequestId();
+                    String name = (String) message.getPayload();
+                    logger.info("📝 處理請求: name={}, requestId={}", name, requestId);
 
-                Mono<Void> queryFlow = peopleService.getPeopleByName(name)
-                    .flatMap(people -> {
-                        logger.info("✅ 查詢成功: name={}, requestId={}", name, requestId);
-                        Mono<Void> cacheWrite = (redisService == null)
-                                ? Mono.empty()
-                                : Mono.fromCallable(() -> objectMapper.writeValueAsString(people))
-                                    .flatMap(json -> redisService.set(cacheKey, json, Duration.ofSeconds(60)).then());
-                        return cacheWrite.then(asyncResultService.sendCompletedResultReactive(requestId, people));
-                    })
-                    .switchIfEmpty(
-                        Mono.defer(() -> {
-                            logger.warn("⚠️ 角色不存在: name={}, requestId={}", name, requestId);
-                            return asyncResultService.sendFailedResultReactive(requestId, "角色不存在: " + name);
-                        })
-                    );
+                    String cacheKey = "people:getByName:" + name;
+                    Mono<Void> cachedFlow = (redisService == null ? Mono.<String>empty() : redisService.get(cacheKey))
+                            .flatMap(cached -> {
+                                if (cached != null) {
+                                    logger.info("🗃️ 命中快取: {}", cacheKey);
+                                    return asyncResultService.sendCompletedResultReactive(requestId, cached);
+                                }
+                                return Mono.empty();
+                            });
 
-                return cachedFlow.switchIfEmpty(queryFlow)
-                    .doOnSuccess(v -> {
-                        logger.info("🎉 People Get-By-Name 處理完成: requestId={}", requestId);
-                        delivery.ack();
-                    })
-                    .doOnError(error -> {
-                        logger.error("❌ People Get-By-Name 處理失敗: requestId={}, error={}", requestId, error.getMessage());
-                        
-                        asyncResultService.sendFailedResultReactive(requestId, "獲取角色失敗: " + error.getMessage())
-                            .doFinally(signalType -> delivery.nack(false))
-                            .subscribe();
-                    });
-            })
-            .onErrorResume(parseError -> {
-                logger.error("❌ 無法解析消息: {}, error={}", messageJson, parseError.getMessage());
-                delivery.nack(false);
-                return Mono.empty();
-            })
-            .then();
+                    Mono<Void> queryFlow = peopleService.getPeopleByName(name)
+                            .flatMap(people -> {
+                                logger.info("✅ 查詢成功: name={}, requestId={}", name, requestId);
+                                Mono<Void> cacheWrite = (redisService == null)
+                                        ? Mono.empty()
+                                        : Mono.fromCallable(() -> objectMapper.writeValueAsString(people))
+                                                .flatMap(json -> redisService
+                                                        .set(cacheKey, json, Duration.ofSeconds(60)).then());
+                                return cacheWrite
+                                        .then(asyncResultService.sendCompletedResultReactive(requestId, people));
+                            })
+                            .switchIfEmpty(
+                                    Mono.defer(() -> {
+                                        logger.warn("⚠️ 角色不存在: name={}, requestId={}", name, requestId);
+                                        return asyncResultService.sendFailedResultReactive(requestId, "角色不存在: " + name);
+                                    }));
+
+                    return cachedFlow.switchIfEmpty(queryFlow)
+                            .doOnSuccess(v -> {
+                                logger.info("🎉 People Get-By-Name 處理完成: requestId={}", requestId);
+                                delivery.ack();
+                            })
+                            .doOnError(error -> {
+                                logger.error("❌ People Get-By-Name 處理失敗: requestId={}, error={}", requestId,
+                                        error.getMessage());
+
+                                asyncResultService.sendFailedResultReactive(requestId, "獲取角色失敗: " + error.getMessage())
+                                        .doFinally(signalType -> delivery.nack(false))
+                                        .subscribe();
+                            });
+                })
+                .onErrorResume(parseError -> {
+                    logger.error("❌ 無法解析消息: {}, error={}", messageJson, parseError.getMessage());
+                    delivery.nack(false);
+                    return Mono.empty();
+                })
+                .then();
     }
 
     /**
@@ -243,38 +328,175 @@ public class ReactivePeopleConsumer {
      */
     private Mono<Void> handleDeleteAllPeople(AcknowledgableDelivery delivery) {
         String messageJson = new String(delivery.getBody());
-        
+
         return Mono.fromCallable(() -> {
-                logger.info("🎯 收到 People Delete-All 請求: {}", messageJson);
-                return objectMapper.readValue(messageJson, AsyncMessageDTO.class);
-            })
-            .flatMap(message -> {
-                String requestId = message.getRequestId();
-                logger.info("📝 處理請求: requestId={}", requestId);
-                
-                return peopleService.deleteAllPeopleReactive()
-                    .flatMap(deletedCount -> {
-                        logger.info("✅ 刪除完成: 共刪除 {} 個角色, requestId={}", deletedCount, requestId);
-                        return asyncResultService.sendCompletedResultReactive(requestId, null);
-                    })
-                    .doOnSuccess(v -> {
-                        logger.info("🎉 People Delete-All 處理完成: requestId={}", requestId);
-                        delivery.ack();
-                    })
-                    .doOnError(error -> {
-                        logger.error("❌ People Delete-All 處理失敗: requestId={}, error={}", requestId, error.getMessage());
-                        
-                        asyncResultService.sendFailedResultReactive(requestId, "刪除所有角色失敗: " + error.getMessage())
-                            .doFinally(signalType -> delivery.nack(false))
-                            .subscribe();
-                    });
-            })
-            .onErrorResume(parseError -> {
-                logger.error("❌ 無法解析消息: {}, error={}", messageJson, parseError.getMessage());
-                delivery.nack(false);
-                return Mono.empty();
-            })
-            .then();
+            logger.info("🎯 收到 People Delete-All 請求: {}", messageJson);
+            return objectMapper.readValue(messageJson, AsyncMessageDTO.class);
+        })
+                .flatMap(message -> {
+                    String requestId = message.getRequestId();
+                    logger.info("📝 處理請求: requestId={}", requestId);
+
+                    return peopleService.deleteAllPeopleReactive()
+                            .flatMap(deletedCount -> {
+                                logger.info("✅ 刪除完成: 共刪除 {} 個角色, requestId={}", deletedCount, requestId);
+                                return asyncResultService.sendCompletedResultReactive(requestId, null);
+                            })
+                            .doOnSuccess(v -> {
+                                logger.info("🎉 People Delete-All 處理完成: requestId={}", requestId);
+                                delivery.ack();
+                            })
+                            .doOnError(error -> {
+                                logger.error("❌ People Delete-All 處理失敗: requestId={}, error={}", requestId,
+                                        error.getMessage());
+
+                                asyncResultService
+                                        .sendFailedResultReactive(requestId, "刪除所有角色失敗: " + error.getMessage())
+                                        .doFinally(signalType -> delivery.nack(false))
+                                        .subscribe();
+                            });
+                })
+                .onErrorResume(parseError -> {
+                    logger.error("❌ 無法解析消息: {}, error={}", messageJson, parseError.getMessage());
+                    delivery.nack(false);
+                    return Mono.empty();
+                })
+                .then();
+    }
+
+    /**
+     * 處理 Get-Names People 請求 - 完全 reactive
+     */
+    private Mono<Void> handleGetPeopleNames(AcknowledgableDelivery delivery) {
+        String messageJson = new String(delivery.getBody());
+
+        return Mono.fromCallable(() -> {
+            logger.info("🎯 收到 People Get-Names 請求: {}", messageJson);
+            return objectMapper.readValue(messageJson, AsyncMessageDTO.class);
+        })
+                .flatMap(message -> {
+                    String requestId = message.getRequestId();
+                    logger.info("📝 處理請求: requestId={}", requestId);
+
+                    return peopleService.getAllPeopleOptimized()
+                            .map(person -> person.getName())
+                            .collectList()
+                            .flatMap(names -> {
+                                logger.info("✅ 查詢完成: 共 {} 個名稱, requestId={}", names.size(), requestId);
+                                return asyncResultService.sendCompletedResultReactive(requestId, names);
+                            })
+                            .doOnSuccess(v -> {
+                                logger.info("🎉 People Get-Names 處理完成: requestId={}", requestId);
+                                delivery.ack();
+                            })
+                            .doOnError(error -> {
+                                logger.error("❌ People Get-Names 處理失敗: requestId={}, error={}", requestId,
+                                        error.getMessage());
+                                asyncResultService
+                                        .sendFailedResultReactive(requestId, "獲取名稱列表失敗: " + error.getMessage())
+                                        .doFinally(signalType -> delivery.nack(false))
+                                        .subscribe();
+                            });
+                })
+                .onErrorResume(parseError -> {
+                    logger.error("❌ 無法解析消息: {}, error={}", messageJson, parseError.getMessage());
+                    delivery.nack(false);
+                    return Mono.empty();
+                })
+                .then();
+    }
+
+    /**
+     * 處理 Insert People 請求
+     */
+    private Mono<Void> handlePeopleInsert(AcknowledgableDelivery delivery) {
+        String messageJson = new String(delivery.getBody());
+        return Mono.fromCallable(() -> objectMapper.readValue(messageJson, AsyncMessageDTO.class))
+                .flatMap(message -> {
+                    String requestId = message.getRequestId();
+                    Object payload = message.getPayload();
+                    logger.info("🎯 處理 People Insert: requestId={}", requestId);
+
+                    return peopleService.insertPersonFromObject(payload)
+                            .flatMap(result -> asyncResultService.sendCompletedResultReactive(requestId, result))
+                            .doOnSuccess(v -> delivery.ack())
+                            .onErrorResume(e -> {
+                                logger.error("❌ Insert 失敗: {}", e.getMessage());
+                                return asyncResultService.sendFailedResultReactive(requestId, e.getMessage())
+                                        .doFinally(s -> delivery.nack(false));
+                            });
+                })
+                .then();
+    }
+
+    /**
+     * 處理 Update People 請求
+     */
+    private Mono<Void> handlePeopleUpdate(AcknowledgableDelivery delivery) {
+        String messageJson = new String(delivery.getBody());
+        return Mono.fromCallable(() -> objectMapper.readValue(messageJson, AsyncMessageDTO.class))
+                .flatMap(message -> {
+                    String requestId = message.getRequestId();
+                    Object payload = message.getPayload();
+                    logger.info("🎯 處理 People Update: requestId={}", requestId);
+
+                    return peopleService.updatePersonFromObject(payload)
+                            .flatMap(result -> asyncResultService.sendCompletedResultReactive(requestId, result))
+                            .doOnSuccess(v -> delivery.ack())
+                            .onErrorResume(e -> {
+                                logger.error("❌ Update 失敗: {}", e.getMessage());
+                                return asyncResultService.sendFailedResultReactive(requestId, e.getMessage())
+                                        .doFinally(s -> delivery.nack(false));
+                            });
+                })
+                .then();
+    }
+
+    /**
+     * 處理 Insert-Multiple People 請求
+     */
+    private Mono<Void> handlePeopleInsertMultiple(AcknowledgableDelivery delivery) {
+        String messageJson = new String(delivery.getBody());
+        return Mono.fromCallable(() -> objectMapper.readValue(messageJson, AsyncMessageDTO.class))
+                .flatMap(message -> {
+                    String requestId = message.getRequestId();
+                    Object payload = message.getPayload();
+                    logger.info("🎯 處理 People Insert-Multiple: requestId={}", requestId);
+
+                    return peopleService.insertMultiplePeopleFromObject(payload)
+                            .collectList()
+                            .flatMap(result -> asyncResultService.sendCompletedResultReactive(requestId, result))
+                            .doOnSuccess(v -> delivery.ack())
+                            .onErrorResume(e -> {
+                                logger.error("❌ Insert-Multiple 失敗: {}", e.getMessage());
+                                return asyncResultService.sendFailedResultReactive(requestId, e.getMessage())
+                                        .doFinally(s -> delivery.nack(false));
+                            });
+                })
+                .then();
+    }
+
+    /**
+     * 處理 Damage Calculation 請求
+     */
+    private Mono<Void> handleDamageCalculation(AcknowledgableDelivery delivery) {
+        String messageJson = new String(delivery.getBody());
+        return Mono.fromCallable(() -> objectMapper.readValue(messageJson, AsyncMessageDTO.class))
+                .flatMap(message -> {
+                    String requestId = message.getRequestId();
+                    String characterName = (String) message.getPayload();
+                    logger.info("🎯 處理 Damage Calculation: name={}, requestId={}", characterName, requestId);
+
+                    return peopleService.calculateDamageWithWeapon(characterName)
+                            .flatMap(damage -> asyncResultService.sendCompletedResultReactive(requestId, damage))
+                            .doOnSuccess(v -> delivery.ack())
+                            .onErrorResume(e -> {
+                                logger.error("❌ Damage Calc 失敗: {}", e.getMessage());
+                                return asyncResultService.sendFailedResultReactive(requestId, e.getMessage())
+                                        .doFinally(s -> delivery.nack(false));
+                            });
+                })
+                .then();
     }
 
     @PreDestroy
