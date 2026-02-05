@@ -12,7 +12,7 @@ spring:
   config:
     import: optional:classpath:env/${env:local}.properties
   r2dbc:
-    url: r2dbc:postgresql://${SPRING_DATASOURCE_HOST}:${SPRING_DATASOURCE_PORT}/${SPRING_DATASOURCE_DBNAME}
+    url: r2dbc:postgresql://${SPRING_DATASOURCE_HOST}:${SPRING_DATASOURCE_PORT}/${SPRING_DATASOURCE_DBNAME}?sslMode=require&connectTimeout=PT30S
     username: ${SPRING_DATASOURCE_USERNAME}
     password: ${SPRING_DATASOURCE_PASSWORD}
     pool:
@@ -20,6 +20,8 @@ spring:
       initial-size: 1
       max-size: 5  # 限制為個位數連線
       max-idle-time: 30m
+      max-create-connection-time: PT30S
+      max-acquire-time: PT30S
   rabbitmq:
     enabled: ${RABBITMQ_ENABLED:true}
     legacy:
