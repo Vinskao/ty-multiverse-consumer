@@ -18,7 +18,7 @@ spring:
     pool:
       enabled: true
       initial-size: 1
-      max-size: 3  # 降低到 3 以配合 Aiven Cloud max_connections=20 限制
+      max-size: 2  # 降低到 2 以配合 Aiven Cloud max_connections=20 限制
       max-idle-time: 30m
   rabbitmq:
     enabled: ${RABBITMQ_ENABLED:true}
