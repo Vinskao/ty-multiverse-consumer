@@ -12,14 +12,16 @@ spring:
   config:
     import: optional:classpath:env/${env:local}.properties
   r2dbc:
-    url: r2dbc:postgresql://${SPRING_DATASOURCE_HOST}:${SPRING_DATASOURCE_PORT}/${SPRING_DATASOURCE_DBNAME}
+    url: r2dbc:postgresql://${SPRING_DATASOURCE_HOST}:${SPRING_DATASOURCE_PORT}/${SPRING_DATASOURCE_DBNAME}?sslMode=require
     username: ${SPRING_DATASOURCE_USERNAME}
     password: ${SPRING_DATASOURCE_PASSWORD}
     pool:
       enabled: true
-      initial-size: 1
-      max-size: 2  # 降低到 2 以配合 Aiven Cloud max_connections=20 限制
+      initial-size: 2
+      max-size: 2  # 進一步降低到 2，因為目前連線數已達到 21 個 (Aiven 限制 20)
       max-idle-time: 30m
+      max-acquire-time: 3s  # 獲取連接超時時間
+      validation-query: SELECT 1  # 連接驗證查詢
   rabbitmq:
     enabled: ${RABBITMQ_ENABLED:true}
     legacy:

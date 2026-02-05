@@ -32,6 +32,7 @@ import jakarta.annotation.PreDestroy;
  */
 @Component
 @ConditionalOnProperty(name = "spring.rabbitmq.enabled", havingValue = "true")
+@ConditionalOnProperty(name = "spring.rabbitmq.reactive.enabled", havingValue = "true", matchIfMissing = true)
 public class ReactivePeopleConsumer {
 
     private static final Logger logger = LoggerFactory.getLogger(ReactivePeopleConsumer.class);
