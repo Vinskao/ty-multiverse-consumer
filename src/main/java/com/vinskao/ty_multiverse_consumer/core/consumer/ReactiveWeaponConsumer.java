@@ -58,7 +58,7 @@ public class ReactiveWeaponConsumer {
     // 預設重試策略：指數退避，最大重試 3 次，初始等待 2 秒
     private final Retry defaultRetry = Retry.backoff(3, Duration.ofSeconds(2))
             .maxBackoff(Duration.ofSeconds(10))
-            .doBeforeRetry(retrySignal -> logger.warn("🔄 Weapon 消費者正在嘗試重試 (第 {} 次), 原因: {}", 
+            .doBeforeRetry(retrySignal -> logger.warn("🔄 Weapon 消費者正在嘗試重試 (第 {} 次), 原因: {}",
                     retrySignal.totalRetries() + 1, retrySignal.failure().getMessage()));
 
     /**
@@ -69,30 +69,27 @@ public class ReactiveWeaponConsumer {
     public void startConsumers() {
         logger.info("🚀 啟動 Reactive Weapon Consumer...");
 
-        // 第一批：讀取操作
+        // 第一批：讀取操作（立即啟動）
         startGetAllWeaponsConsumer();
         startGetWeaponByNameConsumer();
         startGetWeaponsByOwnerConsumer();
 
-        // 延遲啟動第二批：寫入和刪除操作
-        new Thread(() -> {
-            try {
-                Thread.sleep(500); // 延遲 500ms
-                logger.info("🔄 啟動 Weapon 寫入和刪除 Consumers...");
-                startSaveWeaponConsumer();
-                startDeleteWeaponConsumer();
-                startDeleteAllWeaponsConsumer();
+        // 第二批：寫入和刪除操作（延遲 500ms）
+        Mono.delay(Duration.ofMillis(500))
+                .doOnNext(tick -> logger.info("🔄 啟動 Weapon 寫入和刪除 Consumers..."))
+                .subscribe(tick -> {
+                    startSaveWeaponConsumer();
+                    startDeleteWeaponConsumer();
+                    startDeleteAllWeaponsConsumer();
 
-                // 再延遲啟動第三批：檢查操作
-                Thread.sleep(500); // 再延遲 500ms
-                logger.info("🔄 啟動 Weapon 檢查 Consumers...");
-                startCheckWeaponExistsConsumer();
-
-                logger.info("✅ Reactive Weapon Consumer 全部啟動完成");
-            } catch (InterruptedException e) {
-                logger.error("❌ Consumer 延遲啟動被中斷", e);
-            }
-        }).start();
+                    // 第三批：檢查操作（再延遲 500ms）
+                    Mono.delay(Duration.ofMillis(500))
+                            .doOnNext(tick2 -> logger.info("🔄 啟動 Weapon 檢查 Consumers..."))
+                            .subscribe(tick2 -> {
+                                startCheckWeaponExistsConsumer();
+                                logger.info("✅ Reactive Weapon Consumer 全部啟動完成");
+                            });
+                });
     }
 
     /**
@@ -100,13 +97,12 @@ public class ReactiveWeaponConsumer {
      */
     private void startGetAllWeaponsConsumer() {
         subscriptions.add(
-            reactiveReceiver
-                .consumeManualAck(RabbitMQConfig.WEAPON_GET_ALL_QUEUE, new ConsumeOptions().qos(2))
-                .flatMap(this::handleGetAllWeapons, 2)
-                .doOnError(error -> logger.error("❌ Weapon Get-All 消費者發生錯誤: {}", error.getMessage()))
-                .retryWhen(defaultRetry)
-                .subscribe()
-        );
+                reactiveReceiver
+                        .consumeManualAck(RabbitMQConfig.WEAPON_GET_ALL_QUEUE, new ConsumeOptions().qos(2))
+                        .flatMap(this::handleGetAllWeapons, 2)
+                        .doOnError(error -> logger.error("❌ Weapon Get-All 消費者發生錯誤: {}", error.getMessage()))
+                        .retryWhen(defaultRetry)
+                        .subscribe());
 
         logger.info("📡 啟動 Weapon Get-All Reactive Consumer (concurrency=2, prefetch=2)");
     }
@@ -116,13 +112,12 @@ public class ReactiveWeaponConsumer {
      */
     private void startGetWeaponByNameConsumer() {
         subscriptions.add(
-            reactiveReceiver
-                .consumeManualAck(RabbitMQConfig.WEAPON_GET_BY_NAME_QUEUE, new ConsumeOptions().qos(2))
-                .flatMap(this::handleGetWeaponByName, 2)
-                .doOnError(error -> logger.error("❌ Weapon Get-By-Name 消費者發生錯誤: {}", error.getMessage()))
-                .retryWhen(defaultRetry)
-                .subscribe()
-        );
+                reactiveReceiver
+                        .consumeManualAck(RabbitMQConfig.WEAPON_GET_BY_NAME_QUEUE, new ConsumeOptions().qos(2))
+                        .flatMap(this::handleGetWeaponByName, 2)
+                        .doOnError(error -> logger.error("❌ Weapon Get-By-Name 消費者發生錯誤: {}", error.getMessage()))
+                        .retryWhen(defaultRetry)
+                        .subscribe());
 
         logger.info("📡 啟動 Weapon Get-By-Name Reactive Consumer (concurrency=2)");
     }
@@ -132,13 +127,12 @@ public class ReactiveWeaponConsumer {
      */
     private void startGetWeaponsByOwnerConsumer() {
         subscriptions.add(
-            reactiveReceiver
-                .consumeManualAck(RabbitMQConfig.WEAPON_GET_BY_OWNER_QUEUE, new ConsumeOptions().qos(2))
-                .flatMap(this::handleGetWeaponsByOwner, 2)
-                .doOnError(error -> logger.error("❌ Weapon Get-By-Owner 消費者發生錯誤: {}", error.getMessage()))
-                .retryWhen(defaultRetry)
-                .subscribe()
-        );
+                reactiveReceiver
+                        .consumeManualAck(RabbitMQConfig.WEAPON_GET_BY_OWNER_QUEUE, new ConsumeOptions().qos(2))
+                        .flatMap(this::handleGetWeaponsByOwner, 2)
+                        .doOnError(error -> logger.error("❌ Weapon Get-By-Owner 消費者發生錯誤: {}", error.getMessage()))
+                        .retryWhen(defaultRetry)
+                        .subscribe());
 
         logger.info("📡 啟動 Weapon Get-By-Owner Reactive Consumer (concurrency=2)");
     }
@@ -148,13 +142,12 @@ public class ReactiveWeaponConsumer {
      */
     private void startSaveWeaponConsumer() {
         subscriptions.add(
-            reactiveReceiver
-                .consumeManualAck(RabbitMQConfig.WEAPON_SAVE_QUEUE, new ConsumeOptions().qos(1))
-                .flatMap(this::handleSaveWeapon, 1)
-                .doOnError(error -> logger.error("❌ Weapon Save 消費者發生錯誤: {}", error.getMessage()))
-                .retryWhen(defaultRetry)
-                .subscribe()
-        );
+                reactiveReceiver
+                        .consumeManualAck(RabbitMQConfig.WEAPON_SAVE_QUEUE, new ConsumeOptions().qos(1))
+                        .flatMap(this::handleSaveWeapon, 1)
+                        .doOnError(error -> logger.error("❌ Weapon Save 消費者發生錯誤: {}", error.getMessage()))
+                        .retryWhen(defaultRetry)
+                        .subscribe());
 
         logger.info("📡 啟動 Weapon Save Reactive Consumer (concurrency=1)");
     }
@@ -164,13 +157,12 @@ public class ReactiveWeaponConsumer {
      */
     private void startDeleteWeaponConsumer() {
         subscriptions.add(
-            reactiveReceiver
-                .consumeManualAck(RabbitMQConfig.WEAPON_DELETE_QUEUE, new ConsumeOptions().qos(1))
-                .flatMap(this::handleDeleteWeapon, 1)
-                .doOnError(error -> logger.error("❌ Weapon Delete 消費者發生錯誤: {}", error.getMessage()))
-                .retryWhen(defaultRetry)
-                .subscribe()
-        );
+                reactiveReceiver
+                        .consumeManualAck(RabbitMQConfig.WEAPON_DELETE_QUEUE, new ConsumeOptions().qos(1))
+                        .flatMap(this::handleDeleteWeapon, 1)
+                        .doOnError(error -> logger.error("❌ Weapon Delete 消費者發生錯誤: {}", error.getMessage()))
+                        .retryWhen(defaultRetry)
+                        .subscribe());
 
         logger.info("📡 啟動 Weapon Delete Reactive Consumer (concurrency=1)");
     }
@@ -180,13 +172,12 @@ public class ReactiveWeaponConsumer {
      */
     private void startDeleteAllWeaponsConsumer() {
         subscriptions.add(
-            reactiveReceiver
-                .consumeManualAck(RabbitMQConfig.WEAPON_DELETE_ALL_QUEUE, new ConsumeOptions().qos(1))
-                .flatMap(this::handleDeleteAllWeapons, 1)
-                .doOnError(error -> logger.error("❌ Weapon Delete-All 消費者發生錯誤: {}", error.getMessage()))
-                .retryWhen(defaultRetry)
-                .subscribe()
-        );
+                reactiveReceiver
+                        .consumeManualAck(RabbitMQConfig.WEAPON_DELETE_ALL_QUEUE, new ConsumeOptions().qos(1))
+                        .flatMap(this::handleDeleteAllWeapons, 1)
+                        .doOnError(error -> logger.error("❌ Weapon Delete-All 消費者發生錯誤: {}", error.getMessage()))
+                        .retryWhen(defaultRetry)
+                        .subscribe());
 
         logger.info("📡 啟動 Weapon Delete-All Reactive Consumer (concurrency=1)");
     }
@@ -196,13 +187,12 @@ public class ReactiveWeaponConsumer {
      */
     private void startCheckWeaponExistsConsumer() {
         subscriptions.add(
-            reactiveReceiver
-                .consumeManualAck(RabbitMQConfig.WEAPON_EXISTS_QUEUE, new ConsumeOptions().qos(2))
-                .flatMap(this::handleCheckWeaponExists, 2)
-                .doOnError(error -> logger.error("❌ Weapon Exists 消費者發生錯誤: {}", error.getMessage()))
-                .retryWhen(defaultRetry)
-                .subscribe()
-        );
+                reactiveReceiver
+                        .consumeManualAck(RabbitMQConfig.WEAPON_EXISTS_QUEUE, new ConsumeOptions().qos(2))
+                        .flatMap(this::handleCheckWeaponExists, 2)
+                        .doOnError(error -> logger.error("❌ Weapon Exists 消費者發生錯誤: {}", error.getMessage()))
+                        .retryWhen(defaultRetry)
+                        .subscribe());
 
         logger.info("📡 啟動 Weapon Exists Reactive Consumer (concurrency=2)");
     }

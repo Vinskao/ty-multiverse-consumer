@@ -60,7 +60,7 @@ public class ReactivePeopleConsumer {
     // 預設重試策略：指數退避，最大重試 3 次，初始等待 2 秒
     private final Retry defaultRetry = Retry.backoff(3, Duration.ofSeconds(2))
             .maxBackoff(Duration.ofSeconds(10))
-            .doBeforeRetry(retrySignal -> logger.warn("🔄 消費者正在嘗試重試 (第 {} 次), 原因: {}", 
+            .doBeforeRetry(retrySignal -> logger.warn("🔄 消費者正在嘗試重試 (第 {} 次), 原因: {}",
                     retrySignal.totalRetries() + 1, retrySignal.failure().getMessage()));
 
     /**
@@ -71,31 +71,28 @@ public class ReactivePeopleConsumer {
     public void startConsumers() {
         logger.info("🚀 啟動 Reactive People Consumer...");
 
-        // 第一批：讀取操作
+        // 第一批：讀取操作（立即啟動）
         startGetAllPeopleConsumer();
         startGetPeopleNamesConsumer();
         startGetPeopleByNameConsumer();
 
-        // 延遲啟動第二批：寫入操作
-        new Thread(() -> {
-            try {
-                Thread.sleep(1000); // 延遲 1 秒（People 在 Weapon 之後啟動）
-                logger.info("🔄 啟動 People 寫入 Consumers...");
-                startPeopleInsertConsumer();
-                startPeopleUpdateConsumer();
-                startPeopleInsertMultipleConsumer();
+        // 第二批：寫入操作（延遲 1000ms，在 Weapon 之後）
+        Mono.delay(Duration.ofMillis(1000))
+                .doOnNext(tick -> logger.info("🔄 啟動 People 寫入 Consumers..."))
+                .subscribe(tick -> {
+                    startPeopleInsertConsumer();
+                    startPeopleUpdateConsumer();
+                    startPeopleInsertMultipleConsumer();
 
-                // 再延遲啟動第三批：刪除和計算操作
-                Thread.sleep(500); // 再延遲 500ms
-                logger.info("🔄 啟動 People 刪除和計算 Consumers...");
-                startDeleteAllPeopleConsumer();
-                startDamageCalculationConsumer();
-
-                logger.info("✅ Reactive People Consumer 全部啟動完成");
-            } catch (InterruptedException e) {
-                logger.error("❌ Consumer 延遲啟動被中斷", e);
-            }
-        }).start();
+                    // 第三批：刪除和計算操作（再延遲 500ms）
+                    Mono.delay(Duration.ofMillis(500))
+                            .doOnNext(tick2 -> logger.info("🔄 啟動 People 刪除和計算 Consumers..."))
+                            .subscribe(tick2 -> {
+                                startDeleteAllPeopleConsumer();
+                                startDamageCalculationConsumer();
+                                logger.info("✅ Reactive People Consumer 全部啟動完成");
+                            });
+                });
     }
 
     /**
@@ -105,15 +102,14 @@ public class ReactivePeopleConsumer {
      */
     private void startGetAllPeopleConsumer() {
         Disposable.Composite batchSubscriptions = Disposables.composite();
-        
+
         subscriptions.add(
-            reactiveReceiver
-                .consumeManualAck(RabbitMQConfig.PEOPLE_GET_ALL_QUEUE, new ConsumeOptions().qos(2))
-                .flatMap(this::handleGetAllPeople, 2)
-                .doOnError(error -> logger.error("❌ People Get-All 消費者發生錯誤: {}", error.getMessage()))
-                .retryWhen(defaultRetry)
-                .subscribe()
-        );
+                reactiveReceiver
+                        .consumeManualAck(RabbitMQConfig.PEOPLE_GET_ALL_QUEUE, new ConsumeOptions().qos(2))
+                        .flatMap(this::handleGetAllPeople, 2)
+                        .doOnError(error -> logger.error("❌ People Get-All 消費者發生錯誤: {}", error.getMessage()))
+                        .retryWhen(defaultRetry)
+                        .subscribe());
 
         logger.info("📡 啟動 People Get-All Reactive Consumer (concurrency=2, prefetch=2)");
     }
@@ -123,13 +119,12 @@ public class ReactivePeopleConsumer {
      */
     private void startGetPeopleNamesConsumer() {
         subscriptions.add(
-            reactiveReceiver
-                .consumeManualAck(RabbitMQConfig.PEOPLE_GET_NAMES_QUEUE, new ConsumeOptions().qos(2))
-                .flatMap(this::handleGetPeopleNames, 2)
-                .doOnError(error -> logger.error("❌ People Get-Names 消費者發生錯誤: {}", error.getMessage()))
-                .retryWhen(defaultRetry)
-                .subscribe()
-        );
+                reactiveReceiver
+                        .consumeManualAck(RabbitMQConfig.PEOPLE_GET_NAMES_QUEUE, new ConsumeOptions().qos(2))
+                        .flatMap(this::handleGetPeopleNames, 2)
+                        .doOnError(error -> logger.error("❌ People Get-Names 消費者發生錯誤: {}", error.getMessage()))
+                        .retryWhen(defaultRetry)
+                        .subscribe());
 
         logger.info("📡 啟動 People Get-Names Reactive Consumer (concurrency=2)");
     }
@@ -139,13 +134,12 @@ public class ReactivePeopleConsumer {
      */
     private void startGetPeopleByNameConsumer() {
         subscriptions.add(
-            reactiveReceiver
-                .consumeManualAck(RabbitMQConfig.PEOPLE_GET_BY_NAME_QUEUE, new ConsumeOptions().qos(2))
-                .flatMap(this::handleGetPeopleByName, 2)
-                .doOnError(error -> logger.error("❌ People Get-By-Name 消費者發生錯誤: {}", error.getMessage()))
-                .retryWhen(defaultRetry)
-                .subscribe()
-        );
+                reactiveReceiver
+                        .consumeManualAck(RabbitMQConfig.PEOPLE_GET_BY_NAME_QUEUE, new ConsumeOptions().qos(2))
+                        .flatMap(this::handleGetPeopleByName, 2)
+                        .doOnError(error -> logger.error("❌ People Get-By-Name 消費者發生錯誤: {}", error.getMessage()))
+                        .retryWhen(defaultRetry)
+                        .subscribe());
 
         logger.info("📡 啟動 People Get-By-Name Reactive Consumer (concurrency=2)");
     }
@@ -155,13 +149,12 @@ public class ReactivePeopleConsumer {
      */
     private void startDeleteAllPeopleConsumer() {
         subscriptions.add(
-            reactiveReceiver
-                .consumeManualAck(RabbitMQConfig.PEOPLE_DELETE_ALL_QUEUE, new ConsumeOptions().qos(1))
-                .flatMap(this::handleDeleteAllPeople, 1)
-                .doOnError(error -> logger.error("❌ People Delete-All 消費者發生錯誤: {}", error.getMessage()))
-                .retryWhen(defaultRetry)
-                .subscribe()
-        );
+                reactiveReceiver
+                        .consumeManualAck(RabbitMQConfig.PEOPLE_DELETE_ALL_QUEUE, new ConsumeOptions().qos(1))
+                        .flatMap(this::handleDeleteAllPeople, 1)
+                        .doOnError(error -> logger.error("❌ People Delete-All 消費者發生錯誤: {}", error.getMessage()))
+                        .retryWhen(defaultRetry)
+                        .subscribe());
 
         logger.info("📡 啟動 People Delete-All Reactive Consumer (concurrency=1)");
     }
@@ -171,13 +164,12 @@ public class ReactivePeopleConsumer {
      */
     private void startPeopleInsertConsumer() {
         subscriptions.add(
-            reactiveReceiver
-                .consumeManualAck(RabbitMQConfig.PEOPLE_INSERT_QUEUE, new ConsumeOptions().qos(2))
-                .flatMap(this::handlePeopleInsert, 2)
-                .doOnError(error -> logger.error("❌ People Insert 消費者發生錯誤: {}", error.getMessage()))
-                .retryWhen(defaultRetry)
-                .subscribe()
-        );
+                reactiveReceiver
+                        .consumeManualAck(RabbitMQConfig.PEOPLE_INSERT_QUEUE, new ConsumeOptions().qos(2))
+                        .flatMap(this::handlePeopleInsert, 2)
+                        .doOnError(error -> logger.error("❌ People Insert 消費者發生錯誤: {}", error.getMessage()))
+                        .retryWhen(defaultRetry)
+                        .subscribe());
 
         logger.info("📡 啟動 People Insert Reactive Consumer (concurrency=2)");
     }
@@ -187,13 +179,12 @@ public class ReactivePeopleConsumer {
      */
     private void startPeopleUpdateConsumer() {
         subscriptions.add(
-            reactiveReceiver
-                .consumeManualAck(RabbitMQConfig.PEOPLE_UPDATE_QUEUE, new ConsumeOptions().qos(2))
-                .flatMap(this::handlePeopleUpdate, 2)
-                .doOnError(error -> logger.error("❌ People Update 消費者發生錯誤: {}", error.getMessage()))
-                .retryWhen(defaultRetry)
-                .subscribe()
-        );
+                reactiveReceiver
+                        .consumeManualAck(RabbitMQConfig.PEOPLE_UPDATE_QUEUE, new ConsumeOptions().qos(2))
+                        .flatMap(this::handlePeopleUpdate, 2)
+                        .doOnError(error -> logger.error("❌ People Update 消費者發生錯誤: {}", error.getMessage()))
+                        .retryWhen(defaultRetry)
+                        .subscribe());
 
         logger.info("📡 啟動 People Update Reactive Consumer (concurrency=2)");
     }
@@ -203,13 +194,12 @@ public class ReactivePeopleConsumer {
      */
     private void startPeopleInsertMultipleConsumer() {
         subscriptions.add(
-            reactiveReceiver
-                .consumeManualAck(RabbitMQConfig.PEOPLE_INSERT_MULTIPLE_QUEUE, new ConsumeOptions().qos(1))
-                .flatMap(this::handlePeopleInsertMultiple, 1)
-                .doOnError(error -> logger.error("❌ People Insert-Multiple 消費者發生錯誤: {}", error.getMessage()))
-                .retryWhen(defaultRetry)
-                .subscribe()
-        );
+                reactiveReceiver
+                        .consumeManualAck(RabbitMQConfig.PEOPLE_INSERT_MULTIPLE_QUEUE, new ConsumeOptions().qos(1))
+                        .flatMap(this::handlePeopleInsertMultiple, 1)
+                        .doOnError(error -> logger.error("❌ People Insert-Multiple 消費者發生錯誤: {}", error.getMessage()))
+                        .retryWhen(defaultRetry)
+                        .subscribe());
 
         logger.info("📡 啟動 People Insert-Multiple Reactive Consumer (concurrency=1)");
     }
@@ -219,13 +209,12 @@ public class ReactivePeopleConsumer {
      */
     private void startDamageCalculationConsumer() {
         subscriptions.add(
-            reactiveReceiver
-                .consumeManualAck(RabbitMQConfig.PEOPLE_DAMAGE_CALCULATION_QUEUE, new ConsumeOptions().qos(5))
-                .flatMap(this::handleDamageCalculation, 5)
-                .doOnError(error -> logger.error("❌ People Damage Calculation 消費者發生錯誤: {}", error.getMessage()))
-                .retryWhen(defaultRetry)
-                .subscribe()
-        );
+                reactiveReceiver
+                        .consumeManualAck(RabbitMQConfig.PEOPLE_DAMAGE_CALCULATION_QUEUE, new ConsumeOptions().qos(5))
+                        .flatMap(this::handleDamageCalculation, 5)
+                        .doOnError(error -> logger.error("❌ People Damage Calculation 消費者發生錯誤: {}", error.getMessage()))
+                        .retryWhen(defaultRetry)
+                        .subscribe());
 
         logger.info("📡 啟動 People Damage Calculation Reactive Consumer (concurrency=5)");
     }
