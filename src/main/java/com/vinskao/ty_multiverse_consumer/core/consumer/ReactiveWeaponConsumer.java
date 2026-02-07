@@ -50,21 +50,36 @@ public class ReactiveWeaponConsumer {
 
     /**
      * 啟動所有 reactive 消費者
+     * 分批啟動以避免 RabbitMQ Channel 創建失敗
      */
     @PostConstruct
     public void startConsumers() {
         logger.info("🚀 啟動 Reactive Weapon Consumer...");
 
-        // 啟動各個隊列的消費者
+        // 第一批：讀取操作
         startGetAllWeaponsConsumer();
         startGetWeaponByNameConsumer();
         startGetWeaponsByOwnerConsumer();
-        startSaveWeaponConsumer();
-        startDeleteWeaponConsumer();
-        startDeleteAllWeaponsConsumer();
-        startCheckWeaponExistsConsumer();
 
-        logger.info("✅ Reactive Weapon Consumer 啟動完成");
+        // 延遲啟動第二批：寫入和刪除操作
+        new Thread(() -> {
+            try {
+                Thread.sleep(500); // 延遲 500ms
+                logger.info("🔄 啟動 Weapon 寫入和刪除 Consumers...");
+                startSaveWeaponConsumer();
+                startDeleteWeaponConsumer();
+                startDeleteAllWeaponsConsumer();
+
+                // 再延遲啟動第三批：檢查操作
+                Thread.sleep(500); // 再延遲 500ms
+                logger.info("🔄 啟動 Weapon 檢查 Consumers...");
+                startCheckWeaponExistsConsumer();
+
+                logger.info("✅ Reactive Weapon Consumer 全部啟動完成");
+            } catch (InterruptedException e) {
+                logger.error("❌ Consumer 延遲啟動被中斷", e);
+            }
+        }).start();
     }
 
     /**

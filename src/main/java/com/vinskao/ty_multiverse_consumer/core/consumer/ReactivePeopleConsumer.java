@@ -54,22 +54,37 @@ public class ReactivePeopleConsumer {
 
     /**
      * 啟動所有 reactive 消費者
+     * 分批啟動以避免 RabbitMQ Channel 創建失敗
      */
     @PostConstruct
     public void startConsumers() {
         logger.info("🚀 啟動 Reactive People Consumer...");
 
-        // 啟動各個隊列的消費者
+        // 第一批：讀取操作
         startGetAllPeopleConsumer();
         startGetPeopleNamesConsumer();
         startGetPeopleByNameConsumer();
-        startPeopleInsertConsumer();
-        startPeopleUpdateConsumer();
-        startPeopleInsertMultipleConsumer();
-        startDeleteAllPeopleConsumer();
-        startDamageCalculationConsumer();
 
-        logger.info("✅ Reactive People Consumer 啟動完成");
+        // 延遲啟動第二批：寫入操作
+        new Thread(() -> {
+            try {
+                Thread.sleep(1000); // 延遲 1 秒（People 在 Weapon 之後啟動）
+                logger.info("🔄 啟動 People 寫入 Consumers...");
+                startPeopleInsertConsumer();
+                startPeopleUpdateConsumer();
+                startPeopleInsertMultipleConsumer();
+
+                // 再延遲啟動第三批：刪除和計算操作
+                Thread.sleep(500); // 再延遲 500ms
+                logger.info("🔄 啟動 People 刪除和計算 Consumers...");
+                startDeleteAllPeopleConsumer();
+                startDamageCalculationConsumer();
+
+                logger.info("✅ Reactive People Consumer 全部啟動完成");
+            } catch (InterruptedException e) {
+                logger.error("❌ Consumer 延遲啟動被中斷", e);
+            }
+        }).start();
     }
 
     /**
