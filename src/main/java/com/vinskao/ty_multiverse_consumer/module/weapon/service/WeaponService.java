@@ -19,7 +19,6 @@ public class WeaponService {
     private final WeaponRepository weaponRepository;
     private final DatabaseClient databaseClient;
 
-
     public WeaponService(WeaponRepository weaponRepository, DatabaseClient databaseClient) {
         this.databaseClient = databaseClient;
 
@@ -65,6 +64,7 @@ public class WeaponService {
     /**
      * Save or update a weapon
      * 使用 UPSERT (INSERT ... ON CONFLICT) 避免樂觀鎖版本衝突
+     * 注意：此方法會重置版本號為 0，適用於完全替換武器數據的場景
      */
     @Transactional
     public Mono<Weapon> saveWeapon(Weapon weapon) {
@@ -84,7 +84,7 @@ public class WeaponService {
                     bonus_attributes = EXCLUDED.bonus_attributes,
                     state_attributes = EXCLUDED.state_attributes,
                     updated_at = EXCLUDED.updated_at,
-                    version = weapon.version + 1
+                    version = 0
                 RETURNING *
                 """;
 
