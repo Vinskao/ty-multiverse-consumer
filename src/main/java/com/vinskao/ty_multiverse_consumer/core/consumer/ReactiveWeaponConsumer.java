@@ -60,6 +60,8 @@ public class ReactiveWeaponConsumer {
         startGetWeaponByNameConsumer();
         startGetWeaponsByOwnerConsumer();
         startSaveWeaponConsumer();
+        startDeleteWeaponConsumer();
+        startDeleteAllWeaponsConsumer();
         startCheckWeaponExistsConsumer();
 
         logger.info("✅ Reactive Weapon Consumer 啟動完成");
@@ -115,6 +117,32 @@ public class ReactiveWeaponConsumer {
                 .subscribe();
 
         logger.info("📡 啟動 Weapon Save Reactive Consumer (concurrency=1)");
+    }
+
+    /**
+     * Weapon Delete 消費者
+     */
+    private void startDeleteWeaponConsumer() {
+        reactiveReceiver
+                .consumeManualAck(RabbitMQConfig.WEAPON_DELETE_QUEUE, new ConsumeOptions().qos(1))
+                .flatMap(this::handleDeleteWeapon, 1) // 刪除操作序列化處理
+                .doOnError(error -> logger.error("❌ Weapon Delete 消費者發生錯誤", error))
+                .subscribe();
+
+        logger.info("📡 啟動 Weapon Delete Reactive Consumer (concurrency=1)");
+    }
+
+    /**
+     * Weapon Delete-All 消費者
+     */
+    private void startDeleteAllWeaponsConsumer() {
+        reactiveReceiver
+                .consumeManualAck(RabbitMQConfig.WEAPON_DELETE_ALL_QUEUE, new ConsumeOptions().qos(1))
+                .flatMap(this::handleDeleteAllWeapons, 1) // 批量刪除操作序列化處理
+                .doOnError(error -> logger.error("❌ Weapon Delete-All 消費者發生錯誤", error))
+                .subscribe();
+
+        logger.info("📡 啟動 Weapon Delete-All Reactive Consumer (concurrency=1)");
     }
 
     /**
@@ -366,6 +394,92 @@ public class ReactiveWeaponConsumer {
                 } catch (Exception ne) {
                     logger.error("❌ NACK 失敗: error={}", ne.getMessage(), ne);
                 }
+                return Mono.empty();
+            }
+        });
+    }
+
+    /**
+     * 處理 Delete Weapon 請求 - 完全 reactive
+     */
+    private Mono<Void> handleDeleteWeapon(AcknowledgableDelivery delivery) {
+        return Mono.defer(() -> {
+            try {
+                String messageJson = new String(delivery.getBody());
+                logger.info("🎯 收到 Weapon Delete 請求: {}", messageJson);
+
+                AsyncMessageDTO message = objectMapper.readValue(messageJson, AsyncMessageDTO.class);
+                String requestId = message.getRequestId();
+                String weaponId = (String) message.getPayload();
+                logger.info("📝 處理請求: weaponId={}, requestId={}", weaponId, requestId);
+
+                return weaponService.deleteWeapon(weaponId)
+                        .then(Mono.defer(() -> {
+                            logger.info("✅ 刪除成功: weaponId={}, requestId={}", weaponId, requestId);
+                            return asyncResultService.sendCompletedResultReactive(requestId, true)
+                                    .doOnSuccess(v -> {
+                                        logger.info("🎉 Weapon Delete 處理完成: requestId={}", requestId);
+                                        delivery.ack();
+                                    })
+                                    .doOnError(error -> {
+                                        logger.error("❌ Weapon Delete 發送結果失敗: requestId={}, error={}", requestId,
+                                                error.getMessage());
+                                        delivery.nack(false);
+                                    });
+                        }))
+                        .onErrorResume(error -> {
+                            logger.error("❌ Weapon Delete 處理失敗: requestId={}, error={}", requestId, error.getMessage());
+                            return asyncResultService
+                                    .sendFailedResultReactive(requestId, "刪除武器失敗: " + error.getMessage())
+                                    .doFinally(signalType -> delivery.nack(false));
+                        });
+
+            } catch (Exception e) {
+                logger.error("❌ 無法解析消息: error={}", e.getMessage());
+                delivery.nack(false);
+                return Mono.empty();
+            }
+        });
+    }
+
+    /**
+     * 處理 Delete-All Weapons 請求 - 完全 reactive
+     */
+    private Mono<Void> handleDeleteAllWeapons(AcknowledgableDelivery delivery) {
+        return Mono.defer(() -> {
+            try {
+                String messageJson = new String(delivery.getBody());
+                logger.info("🎯 收到 Weapon Delete-All 請求: {}", messageJson);
+
+                AsyncMessageDTO message = objectMapper.readValue(messageJson, AsyncMessageDTO.class);
+                String requestId = message.getRequestId();
+                logger.info("📝 處理請求: requestId={}", requestId);
+
+                return weaponService.deleteAllWeapons()
+                        .then(Mono.defer(() -> {
+                            logger.info("✅ 批量刪除完成, requestId={}", requestId);
+                            return asyncResultService.sendCompletedResultReactive(requestId, "所有武器已刪除")
+                                    .doOnSuccess(v -> {
+                                        logger.info("🎉 Weapon Delete-All 處理完成: requestId={}", requestId);
+                                        delivery.ack();
+                                    })
+                                    .doOnError(error -> {
+                                        logger.error("❌ Weapon Delete-All 發送結果失敗: requestId={}, error={}", requestId,
+                                                error.getMessage());
+                                        delivery.nack(false);
+                                    });
+                        }))
+                        .onErrorResume(error -> {
+                            logger.error("❌ Weapon Delete-All 處理失敗: requestId={}, error={}", requestId,
+                                    error.getMessage());
+                            return asyncResultService
+                                    .sendFailedResultReactive(requestId, "批量刪除武器失敗: " + error.getMessage())
+                                    .doFinally(signalType -> delivery.nack(false));
+                        });
+
+            } catch (Exception e) {
+                logger.error("❌ 無法解析消息: error={}", e.getMessage());
+                delivery.nack(false);
                 return Mono.empty();
             }
         });
