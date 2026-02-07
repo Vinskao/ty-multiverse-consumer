@@ -2,6 +2,7 @@ package com.vinskao.ty_multiverse_consumer.module.weapon.service;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.r2dbc.core.DatabaseClient;
 
 import com.vinskao.ty_multiverse_consumer.module.weapon.dao.WeaponRepository;
 import com.vinskao.ty_multiverse_consumer.module.weapon.domain.vo.Weapon;
@@ -16,8 +17,12 @@ import java.time.LocalDateTime;
 public class WeaponService {
 
     private final WeaponRepository weaponRepository;
+    private final DatabaseClient databaseClient;
 
-    public WeaponService(WeaponRepository weaponRepository) {
+
+    public WeaponService(WeaponRepository weaponRepository, DatabaseClient databaseClient) {
+        this.databaseClient = databaseClient;
+
         this.weaponRepository = weaponRepository;
     }
 
@@ -59,18 +64,57 @@ public class WeaponService {
 
     /**
      * Save or update a weapon
-     * 為了避免版本衝突，先刪除再插入（適用於批量同步場景）
+     * 使用 UPSERT (INSERT ... ON CONFLICT) 避免樂觀鎖版本衝突
      */
     @Transactional
     public Mono<Weapon> saveWeapon(Weapon weapon) {
-        // 先刪除可能存在的舊記錄，再插入新記錄
-        // 這樣可以避免樂觀鎖版本衝突
-        return weaponRepository.deleteById(weapon.getName())
-                .then(weaponRepository.save(weapon))
-                .onErrorResume(error -> {
-                    // 如果刪除失敗（記錄不存在），直接插入
-                    return weaponRepository.save(weapon);
-                });
+        String sql = """
+                INSERT INTO weapon (
+                    weapon, owner, attributes, base_damage, bonus_damage,
+                    bonus_attributes, state_attributes, created_at, updated_at, version
+                ) VALUES (
+                    :weapon, :owner, :attributes, :baseDamage, :bonusDamage,
+                    :bonusAttributes, :stateAttributes, :createdAt, :updatedAt, 0
+                )
+                ON CONFLICT (weapon) DO UPDATE SET
+                    owner = EXCLUDED.owner,
+                    attributes = EXCLUDED.attributes,
+                    base_damage = EXCLUDED.base_damage,
+                    bonus_damage = EXCLUDED.bonus_damage,
+                    bonus_attributes = EXCLUDED.bonus_attributes,
+                    state_attributes = EXCLUDED.state_attributes,
+                    updated_at = EXCLUDED.updated_at,
+                    version = weapon.version + 1
+                RETURNING *
+                """;
+
+        return databaseClient.sql(sql)
+                .bind("weapon", weapon.getName())
+                .bind("owner", weapon.getOwner() != null ? weapon.getOwner() : "")
+                .bind("attributes", weapon.getAttributes() != null ? weapon.getAttributes() : "")
+                .bind("baseDamage", weapon.getBaseDamage() != null ? weapon.getBaseDamage() : 0)
+                .bind("bonusDamage", weapon.getBonusDamage() != null ? weapon.getBonusDamage() : 0)
+                .bind("bonusAttributes",
+                        weapon.getBonusAttributes() != null ? weapon.getBonusAttributes().toArray(new String[0])
+                                : new String[0])
+                .bind("stateAttributes",
+                        weapon.getStateAttributes() != null ? weapon.getStateAttributes().toArray(new String[0])
+                                : new String[0])
+                .bind("createdAt", weapon.getCreatedAt() != null ? weapon.getCreatedAt() : LocalDateTime.now())
+                .bind("updatedAt", LocalDateTime.now())
+                .map((row, metadata) -> {
+                    Weapon result = new Weapon();
+                    result.setName(row.get("weapon", String.class));
+                    result.setOwner(row.get("owner", String.class));
+                    result.setAttributes(row.get("attributes", String.class));
+                    result.setBaseDamage(row.get("base_damage", Integer.class));
+                    result.setBonusDamage(row.get("bonus_damage", Integer.class));
+                    result.setCreatedAt(row.get("created_at", LocalDateTime.class));
+                    result.setUpdatedAt(row.get("updated_at", LocalDateTime.class));
+                    result.setVersion(row.get("version", Long.class));
+                    return result;
+                })
+                .one();
     }
 
     /**
