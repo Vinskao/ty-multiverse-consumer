@@ -12,6 +12,8 @@ import reactor.core.publisher.Mono;
 import reactor.rabbitmq.AcknowledgableDelivery;
 import reactor.rabbitmq.ConsumeOptions;
 import reactor.rabbitmq.Receiver;
+import reactor.core.Disposable;
+import reactor.core.Disposables;
 import reactor.util.retry.Retry;
 
 import jakarta.annotation.PostConstruct;
@@ -41,6 +43,8 @@ public class ReactiveAsyncResultConsumer {
     @Autowired
     private ObjectMapper objectMapper;
 
+    private final Disposable.Composite subscriptions = Disposables.composite();
+
     /**
      * 啟動 reactive 消費者
      */
@@ -59,13 +63,15 @@ public class ReactiveAsyncResultConsumer {
      * 使用高優先級接收器，prefetch=1，確保快速處理
      */
     private void startAsyncResultConsumer() {
-        reactiveReceiverHighPriority
-            .consumeManualAck(RabbitMQConfig.ASYNC_RESULT_QUEUE, new ConsumeOptions().qos(1))
-            .flatMap(this::handleAsyncResult, 1) // 序列化處理，避免日誌混亂
-            .doOnError(error -> logger.error("❌ AsyncResult 消費者發生錯誤", error))
-            .retryWhen(Retry.backoff(3, java.time.Duration.ofSeconds(5))
-                .maxBackoff(java.time.Duration.ofSeconds(30))) // 有限重試，避免無限循環
-            .subscribe();
+        subscriptions.add(
+            reactiveReceiverHighPriority
+                .consumeManualAck(RabbitMQConfig.ASYNC_RESULT_QUEUE, new ConsumeOptions().qos(1))
+                .flatMap(this::handleAsyncResult, 1) // 序列化處理，避免日誌混亂
+                .doOnError(error -> logger.error("❌ AsyncResult 消費者發生錯誤: {}", error.getMessage()))
+                .retryWhen(Retry.backoff(3, java.time.Duration.ofSeconds(5))
+                    .maxBackoff(java.time.Duration.ofSeconds(30))) // 有限重試，避免無限循環
+                .subscribe()
+        );
         
         logger.info("📡 啟動 AsyncResult Reactive Consumer (concurrency=1, prefetch=1)");
     }
@@ -199,6 +205,6 @@ public class ReactiveAsyncResultConsumer {
     @PreDestroy
     public void shutdown() {
         logger.info("🛑 關閉 Reactive AsyncResult Consumer...");
-        // Receiver 會自動關閉連接
+        subscriptions.dispose();
     }
 }
