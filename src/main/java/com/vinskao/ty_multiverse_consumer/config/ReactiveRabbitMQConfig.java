@@ -56,8 +56,10 @@ public class ReactiveRabbitMQConfig {
         connectionFactory.setHandshakeTimeout(30000); // 握手超時 30 秒（默認 10 秒）
         connectionFactory.setChannelRpcTimeout(30000); // Channel RPC 超時 30 秒
 
-        // 連接池配置 - 與 R2DBC 連線池協調
-        connectionFactory.setRequestedChannelMax(10);
+        // 連接池配置 - 增加 Channel 數量以支持所有消費者
+        // People Consumers: 8 個 + Weapon Consumers: 7 個 + AsyncResult: 1 個 = 16 個
+        // 預留額外空間，設置為 30
+        connectionFactory.setRequestedChannelMax(30); // 從 10 增加到 30
         connectionFactory.setRequestedFrameMax(131072);
         connectionFactory.setRequestedHeartbeat(60);
 
@@ -67,7 +69,7 @@ public class ReactiveRabbitMQConfig {
         connectionFactory.setTopologyRecoveryEnabled(true); // 啟用拓撲恢復（隊列、交換機等）
 
         logger.info(
-                "✅ 配置 Reactive RabbitMQ 連接工廠: host={}, port={}, virtualHost={}, connectionTimeout=30s, handshakeTimeout=30s",
+                "✅ 配置 Reactive RabbitMQ 連接工廠: host={}, port={}, virtualHost={}, channelMax=30, connectionTimeout=30s",
                 host, port, virtualHost);
 
         return connectionFactory;
