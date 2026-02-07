@@ -14,13 +14,13 @@ import java.time.LocalDateTime;
 
 @Service
 public class WeaponService {
-    
+
     private final WeaponRepository weaponRepository;
-    
+
     public WeaponService(WeaponRepository weaponRepository) {
         this.weaponRepository = weaponRepository;
     }
-    
+
     /**
      * Get all weapons
      *
@@ -56,13 +56,21 @@ public class WeaponService {
     public Mono<Weapon> getWeaponById(String name) {
         return weaponRepository.findById(name);
     }
-    
+
     /**
      * Save or update a weapon
+     * 為了避免版本衝突，先刪除再插入（適用於批量同步場景）
      */
     @Transactional
     public Mono<Weapon> saveWeapon(Weapon weapon) {
-        return weaponRepository.save(weapon);
+        // 先刪除可能存在的舊記錄，再插入新記錄
+        // 這樣可以避免樂觀鎖版本衝突
+        return weaponRepository.deleteById(weapon.getName())
+                .then(weaponRepository.save(weapon))
+                .onErrorResume(error -> {
+                    // 如果刪除失敗（記錄不存在），直接插入
+                    return weaponRepository.save(weapon);
+                });
     }
 
     /**
@@ -78,8 +86,8 @@ public class WeaponService {
         // 檢查是否為更新操作（武器已存在）
         if (weapon.getName() != null) {
             return weaponRepository.findById(weapon.getName())
-                .flatMap(existing -> updateWeaponSmart(existing, weapon))
-                .switchIfEmpty(weaponRepository.save(weapon));
+                    .flatMap(existing -> updateWeaponSmart(existing, weapon))
+                    .switchIfEmpty(weaponRepository.save(weapon));
         }
 
         return weaponRepository.save(weapon);
@@ -122,14 +130,14 @@ public class WeaponService {
 
         return weaponRepository.save(existing);
     }
-    
+
     /**
      * Check if a string is valid (not null and not empty)
      */
     private boolean isValidString(String value) {
         return value != null && !value.trim().isEmpty();
     }
-    
+
     /**
      * Delete a weapon by name (ID)
      */
@@ -152,23 +160,23 @@ public class WeaponService {
     public Mono<Boolean> weaponExists(String name) {
         return weaponRepository.existsById(name);
     }
-    
+
     /**
      * Update weapon attributes
      */
     @Transactional
     public Mono<Weapon> updateWeaponAttributes(String name, Weapon newWeapon) {
         return weaponRepository.findById(name)
-            .flatMap(existing -> {
-                if (newWeapon.getBaseDamage() != null) {
-                    existing.setBaseDamage(newWeapon.getBaseDamage());
-                }
-                if (newWeapon.getAttributes() != null) {
-                    existing.setAttributes(newWeapon.getAttributes());
-                }
-                existing.setUpdatedAt(LocalDateTime.now());
-                return weaponRepository.save(existing);
-            });
+                .flatMap(existing -> {
+                    if (newWeapon.getBaseDamage() != null) {
+                        existing.setBaseDamage(newWeapon.getBaseDamage());
+                    }
+                    if (newWeapon.getAttributes() != null) {
+                        existing.setAttributes(newWeapon.getAttributes());
+                    }
+                    existing.setUpdatedAt(LocalDateTime.now());
+                    return weaponRepository.save(existing);
+                });
     }
 
     /**
@@ -177,11 +185,11 @@ public class WeaponService {
     @Transactional
     public Mono<Weapon> updateWeaponBaseDamage(String name, Integer baseDamage) {
         return weaponRepository.findById(name)
-            .flatMap(existing -> {
-                existing.setBaseDamage(baseDamage);
-                existing.setUpdatedAt(LocalDateTime.now());
-                return weaponRepository.save(existing);
-            });
+                .flatMap(existing -> {
+                    existing.setBaseDamage(baseDamage);
+                    existing.setUpdatedAt(LocalDateTime.now());
+                    return weaponRepository.save(existing);
+                });
     }
 
     /**
@@ -190,11 +198,11 @@ public class WeaponService {
     @Transactional
     public Mono<Weapon> updateWeaponBonusDamage(String name, Integer bonusDamage) {
         return weaponRepository.findById(name)
-            .flatMap(existing -> {
-                existing.setBonusDamage(bonusDamage);
-                existing.setUpdatedAt(LocalDateTime.now());
-                return weaponRepository.save(existing);
-            });
+                .flatMap(existing -> {
+                    existing.setBonusDamage(bonusDamage);
+                    existing.setUpdatedAt(LocalDateTime.now());
+                    return weaponRepository.save(existing);
+                });
     }
 
     /**
@@ -203,11 +211,11 @@ public class WeaponService {
     @Transactional
     public Mono<Weapon> updateWeaponBonusAttributes(String name, List<String> bonusAttributes) {
         return weaponRepository.findById(name)
-            .flatMap(existing -> {
-                existing.setBonusAttributes(bonusAttributes);
-                existing.setUpdatedAt(LocalDateTime.now());
-                return weaponRepository.save(existing);
-            });
+                .flatMap(existing -> {
+                    existing.setBonusAttributes(bonusAttributes);
+                    existing.setUpdatedAt(LocalDateTime.now());
+                    return weaponRepository.save(existing);
+                });
     }
 
     /**
@@ -216,13 +224,13 @@ public class WeaponService {
     @Transactional
     public Mono<Weapon> updateWeaponStateAttributes(String name, List<String> stateAttributes) {
         return weaponRepository.findById(name)
-            .flatMap(existing -> {
-                existing.setStateAttributes(stateAttributes);
-                existing.setUpdatedAt(LocalDateTime.now());
-                return weaponRepository.save(existing);
-            });
+                .flatMap(existing -> {
+                    existing.setStateAttributes(stateAttributes);
+                    existing.setUpdatedAt(LocalDateTime.now());
+                    return weaponRepository.save(existing);
+                });
     }
-    
+
     /**
      * Find weapons by base damage range
      */
@@ -250,4 +258,4 @@ public class WeaponService {
     public Flux<Weapon> findByStateAttribute(String attribute) {
         return weaponRepository.findByStateAttributesContaining(attribute);
     }
-} 
+}
