@@ -36,6 +36,7 @@ public class RabbitMQConfig {
     public static final String PEOPLE_DELETE_QUEUE = "people-delete";
     public static final String PEOPLE_DELETE_ALL_QUEUE = "people-delete-all";
     public static final String PEOPLE_DAMAGE_CALCULATION_QUEUE = "damage-calculation"; // 與 Backend 保持一致
+    public static final String PEOPLE_BATCH_DAMAGE_QUEUE = "people-batch-damage";
 
     // Weapon 隊列名稱
     public static final String WEAPON_GET_ALL_QUEUE = "weapon-get-all";
@@ -64,6 +65,7 @@ public class RabbitMQConfig {
     public static final String PEOPLE_DELETE_ROUTING_KEY = "people.delete";
     public static final String PEOPLE_DELETE_ALL_ROUTING_KEY = "people.delete.all";
     public static final String PEOPLE_DAMAGE_CALCULATION_ROUTING_KEY = "people.damage.calculation";
+    public static final String PEOPLE_BATCH_DAMAGE_ROUTING_KEY = "people.batch.damage";
 
     public static final String WEAPON_GET_ALL_ROUTING_KEY = "weapon.get.all";
     public static final String WEAPON_GET_BY_NAME_ROUTING_KEY = "weapon.get.by.name";
@@ -144,6 +146,13 @@ public class RabbitMQConfig {
     @Bean
     public Queue peopleDamageCalculationQueue() {
         return QueueBuilder.durable(PEOPLE_DAMAGE_CALCULATION_QUEUE)
+                .withArgument("x-message-ttl", 300000) // 5分鐘 TTL
+                .build();
+    }
+
+    @Bean
+    public Queue peopleBatchDamageQueue() {
+        return QueueBuilder.durable(PEOPLE_BATCH_DAMAGE_QUEUE)
                 .withArgument("x-message-ttl", 300000) // 5分鐘 TTL
                 .build();
     }
@@ -311,6 +320,13 @@ public class RabbitMQConfig {
         return BindingBuilder.bind(peopleDamageCalculationQueue())
                 .to(mainExchange())
                 .with(PEOPLE_DAMAGE_CALCULATION_ROUTING_KEY);
+    }
+
+    @Bean
+    public Binding peopleBatchDamageBinding() {
+        return BindingBuilder.bind(peopleBatchDamageQueue())
+                .to(mainExchange())
+                .with(PEOPLE_BATCH_DAMAGE_ROUTING_KEY);
     }
 
     // 注意：回傳隊列綁定已刪除，不再使用

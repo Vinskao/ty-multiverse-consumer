@@ -12,6 +12,7 @@ import com.vinskao.ty_multiverse_consumer.core.dto.AsyncMessageDTO;
 import com.vinskao.ty_multiverse_consumer.core.service.AsyncResultService;
 import com.vinskao.ty_multiverse_consumer.module.people.domain.vo.People;
 import com.vinskao.ty_multiverse_consumer.module.people.service.PeopleService;
+import com.vinskao.ty_multiverse_consumer.module.people.service.WeaponDamageService;
 
 import java.util.List;
 
@@ -29,18 +30,21 @@ import java.util.List;
 @ConditionalOnProperty(name = "spring.rabbitmq.enabled", havingValue = "true")
 @ConditionalOnProperty(name = "spring.rabbitmq.legacy.enabled", havingValue = "true", matchIfMissing = false)
 public class PeopleConsumer {
-    
+
     private static final Logger logger = LoggerFactory.getLogger(PeopleConsumer.class);
-    
+
     @Autowired
     private ObjectMapper objectMapper;
-    
+
     @Autowired
     private PeopleService peopleService;
-    
+
     @Autowired
     private AsyncResultService asyncResultService;
-    
+
+    @Autowired
+    private WeaponDamageService weaponDamageService;
+
     /**
      * 監聽 People 獲取所有請求 - 完全符合 Producer 規範
      *
@@ -54,7 +58,7 @@ public class PeopleConsumer {
             String requestId = message.getRequestId();
 
             logger.info("📝 解析請求: requestId={}, endpoint={}, method={}",
-                       requestId, message.getEndpoint(), message.getMethod());
+                    requestId, message.getEndpoint(), message.getMethod());
             logger.info("⏰ 請求時間戳: {}", message.getTimestamp());
             logger.info("🏷️  來源標識: {}", message.getSource());
 
@@ -72,8 +76,8 @@ public class PeopleConsumer {
                 for (int i = 0; i < sampleSize; i++) {
                     People people = peopleList.get(i);
                     logger.info("  - 角色[{}]: name={}, codeName={}, gender={}, job={}, age={}",
-                               i + 1, people.getName(), people.getCodeName(),
-                               people.getGender(), people.getJob(), people.getAge());
+                            i + 1, people.getName(), people.getCodeName(),
+                            people.getGender(), people.getJob(), people.getAge());
                 }
                 if (peopleList.size() > sampleSize) {
                     logger.info("  ... 還有 {} 個角色", peopleList.size() - sampleSize);
@@ -105,7 +109,7 @@ public class PeopleConsumer {
             }
         }
     }
-    
+
     /**
      * 監聽 People 根據名稱獲取請求
      */
@@ -115,28 +119,28 @@ public class PeopleConsumer {
             logger.info("收到根據名稱獲取角色請求: {}", message);
             String requestId = message.getRequestId();
             String name = extractNameFromPayload(message.getPayload());
-            
+
             logger.info("開始根據名稱獲取角色: name={}, requestId={}", name, requestId);
-            
+
             // 處理請求（使用大小寫不敏感查詢）
             logger.info("查詢角色: name='{}', requestId={}", name, requestId);
             People people = peopleService.getPeopleByName(name).block();
 
             if (people != null) {
                 logger.info("成功獲取角色: name={}, requestId={}", name, requestId);
-                
+
                 // 發送成功結果給 Producer
                 asyncResultService.sendCompletedResult(requestId, people);
             } else {
                 logger.warn("角色不存在: name={}, requestId={}", name, requestId);
-                
+
                 // 發送錯誤結果給 Producer
                 asyncResultService.sendFailedResult(requestId, "角色不存在: " + name);
             }
-            
+
         } catch (Exception e) {
             logger.error("處理根據名稱獲取角色請求失敗: {}", e.getMessage(), e);
-            
+
             // 發送錯誤結果給 Producer
             try {
                 String requestId = message.getRequestId();
@@ -146,7 +150,7 @@ public class PeopleConsumer {
             }
         }
     }
-    
+
     /**
      * 監聽 People 刪除所有請求
      */
@@ -155,20 +159,20 @@ public class PeopleConsumer {
         try {
             logger.info("收到刪除所有角色請求: {}", message);
             String requestId = message.getRequestId();
-            
+
             logger.info("開始刪除所有角色: requestId={}", requestId);
-            
+
             // 處理請求
             peopleService.deleteAllPeople();
-            
+
             logger.info("成功刪除所有角色: requestId={}", requestId);
-            
+
             // 發送成功結果給 Producer
             asyncResultService.sendCompletedResult(requestId, null);
-            
+
         } catch (Exception e) {
             logger.error("處理刪除所有角色請求失敗: {}", e.getMessage(), e);
-            
+
             // 發送錯誤結果給 Producer
             try {
                 String requestId = message.getRequestId();
@@ -302,13 +306,13 @@ public class PeopleConsumer {
                 // 先將 payload 轉換為 JSON 字符串
                 String jsonString = objectMapper.writeValueAsString(payload);
                 logger.info("🔍 Payload JSON: {}", jsonString);
-                
+
                 // 使用 readValue 反序列化為 People 列表
                 peopleList = objectMapper.readValue(
-                    jsonString, 
-                    new TypeReference<List<People>>() {}
-                );
-                
+                        jsonString,
+                        new TypeReference<List<People>>() {
+                        });
+
                 logger.info("✅ 成功反序列化 {} 個角色", peopleList.size());
             } catch (Exception e) {
                 logger.error("反序列化 People 列表失敗: {}", e.getMessage(), e);
@@ -316,23 +320,24 @@ public class PeopleConsumer {
             }
 
             logger.info("準備批量新增 {} 個角色: requestId={}", peopleList.size(), requestId);
-        
-        // 調試：打印第一個角色的所有字段
-        if (!peopleList.isEmpty()) {
-            People firstPerson = peopleList.get(0);
-            logger.debug("第一個角色的字段值:");
-            logger.debug("  name={}, codeName={}, dob={}, race={}", 
-                firstPerson.getName(), firstPerson.getCodeName(), firstPerson.getDob(), firstPerson.getRace());
-            logger.debug("  gender={}, profession={}, job={}, physics={}", 
-                firstPerson.getGender(), firstPerson.getProfession(), firstPerson.getJob(), firstPerson.getPhysics());
-            logger.debug("  email={}, age={}, proxy={}", 
-                firstPerson.getEmail(), firstPerson.getAge(), firstPerson.getProxy());
-        }
+
+            // 調試：打印第一個角色的所有字段
+            if (!peopleList.isEmpty()) {
+                People firstPerson = peopleList.get(0);
+                logger.debug("第一個角色的字段值:");
+                logger.debug("  name={}, codeName={}, dob={}, race={}",
+                        firstPerson.getName(), firstPerson.getCodeName(), firstPerson.getDob(), firstPerson.getRace());
+                logger.debug("  gender={}, profession={}, job={}, physics={}",
+                        firstPerson.getGender(), firstPerson.getProfession(), firstPerson.getJob(),
+                        firstPerson.getPhysics());
+                logger.debug("  email={}, age={}, proxy={}",
+                        firstPerson.getEmail(), firstPerson.getAge(), firstPerson.getProxy());
+            }
 
             // 處理請求 - 使用批量保存方法
             List<People> savedPeople = peopleService.saveAllPeople(peopleList)
-                .collectList()
-                .block();
+                    .collectList()
+                    .block();
 
             if (savedPeople == null) {
                 savedPeople = new java.util.ArrayList<>();
@@ -381,5 +386,47 @@ public class PeopleConsumer {
         }
 
         throw new IllegalArgumentException("無法從 payload 中提取名稱: " + payload.getClass() + " - " + payload);
+    }
+
+    /**
+     * 監聽角色批量傷害計算請求
+     */
+    @RabbitListener(queues = "people-batch-damage", concurrency = "2")
+    public void handleBatchDamage(AsyncMessageDTO message) {
+        try {
+            logger.info("收到角色批量傷害計算請求: {}", message);
+            String requestId = message.getRequestId();
+            Object payload = message.getPayload();
+
+            // 解析名稱列表
+            List<String> names;
+            if (payload instanceof List) {
+                names = objectMapper.convertValue(payload, new TypeReference<List<String>>() {
+                });
+            } else {
+                throw new IllegalArgumentException("無效的 payload 格式，預期為名稱列表");
+            }
+
+            logger.info("開始計算批量傷害: count={}, requestId={}", names.size(), requestId);
+
+            // 處理請求
+            weaponDamageService.calculateBatchDamageWithWeapon(names).subscribe(result -> {
+                logger.info("成功計算批量傷害: requestId={}", requestId);
+                // 發送成功結果給 Producer
+                asyncResultService.sendCompletedResult(requestId, result);
+            }, error -> {
+                logger.error("計算批量傷害失敗: {}", error.getMessage(), error);
+                asyncResultService.sendFailedResult(requestId, "計算批量傷害失敗: " + error.getMessage());
+            });
+
+        } catch (Exception e) {
+            logger.error("處理批量傷害計算請求失敗: {}", e.getMessage(), e);
+            try {
+                String requestId = message.getRequestId();
+                asyncResultService.sendFailedResult(requestId, "處理失敗: " + e.getMessage());
+            } catch (Exception sendError) {
+                logger.error("無法發送錯誤回應: {}", sendError.getMessage());
+            }
+        }
     }
 }
