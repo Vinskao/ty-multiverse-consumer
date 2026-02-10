@@ -1,6 +1,7 @@
 package com.vinskao.ty_multiverse_consumer.core.consumer;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.vinskao.ty_multiverse_consumer.config.RabbitMQConfig;
 import com.vinskao.ty_multiverse_consumer.core.dto.AsyncMessageDTO;
 import com.vinskao.ty_multiverse_consumer.core.service.AsyncResultService;
@@ -17,6 +18,8 @@ import reactor.rabbitmq.ConsumeOptions;
 import reactor.rabbitmq.Receiver;
 import com.vinskao.ty_multiverse_consumer.service.RedisService;
 import java.time.Duration;
+import java.util.List;
+import java.util.Map;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import reactor.core.Disposable;
@@ -537,21 +540,29 @@ public class ReactivePeopleConsumer {
     private Mono<Void> handleDamageCalculation(AcknowledgableDelivery delivery) {
         String messageJson = new String(delivery.getBody());
         return Mono.fromCallable(() -> objectMapper.readValue(messageJson, AsyncMessageDTO.class))
-                .flatMap(message -> {
-                    String requestId = message.getRequestId();
-                    String characterName = (String) message.getPayload();
-                    logger.info("🎯 處理 Damage Calculation: name={}, requestId={}", characterName, requestId);
+                .flatMap(this::processDamageCalculation)
+                .doOnSuccess(v -> delivery.ack())
+                .onErrorResume(e -> {
+                    logger.error("❌ Damage Calculation 異常: {}", e.getMessage());
+                    delivery.nack(false);
+                    return Mono.empty();
+                });
+    }
 
-                    return peopleService.calculateDamageWithWeapon(characterName)
-                            .flatMap(damage -> asyncResultService.sendCompletedResultReactive(requestId, damage))
-                            .doOnSuccess(v -> delivery.ack())
-                            .onErrorResume(e -> {
-                                logger.error("❌ Damage Calc 失敗: {}", e.getMessage());
-                                return asyncResultService.sendFailedResultReactive(requestId, e.getMessage())
-                                        .doFinally(s -> delivery.nack(false));
-                            });
-                })
-                .then();
+    /**
+     * 核心 Damage Calculation 邏輯
+     */
+    private Mono<Void> processDamageCalculation(AsyncMessageDTO message) {
+        String requestId = message.getRequestId();
+        String characterName = (String) message.getPayload();
+        logger.info("🎯 處理 Damage Calculation: name={}, requestId={}", characterName, requestId);
+
+        return peopleService.calculateDamageWithWeapon(characterName)
+                .flatMap(damage -> asyncResultService.sendCompletedResultReactive(requestId, damage))
+                .onErrorResume(e -> {
+                    logger.error("❌ Damage Calculation 失敗: requestId={}, error={}", requestId, e.getMessage());
+                    return asyncResultService.sendFailedResultReactive(requestId, "計算失敗: " + e.getMessage());
+                });
     }
 
     /**
@@ -560,37 +571,37 @@ public class ReactivePeopleConsumer {
     private Mono<Void> handleBatchDamageCalculation(AcknowledgableDelivery delivery) {
         String messageJson = new String(delivery.getBody());
         return Mono.fromCallable(() -> objectMapper.readValue(messageJson, AsyncMessageDTO.class))
-                .flatMap(message -> {
-                    String requestId = message.getRequestId();
-                    Object payload = message.getPayload();
-                    logger.info("🎯 處理 Batch Damage Calculation: requestId={}", requestId);
+                .flatMap(this::processBatchDamageCalculation)
+                .doOnSuccess(v -> delivery.ack())
+                .onErrorResume(e -> {
+                    logger.error("❌ Batch Damage Calculation 異常: {}", e.getMessage());
+                    delivery.nack(false);
+                    return Mono.empty();
+                });
+    }
 
-                    Mono<List<String>> namesMono;
-                    try {
-                        if (payload instanceof List) {
-                            List<String> names = objectMapper.convertValue(payload,
-                                    new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {
-                                    });
-                            namesMono = Mono.just(names);
-                        } else {
-                            namesMono = Mono.error(new IllegalArgumentException("無效的 payload 格式，預期為名稱列表"));
-                        }
-                    } catch (Exception e) {
-                        namesMono = Mono.error(e);
-                    }
+    /**
+     * 核心 Batch Damage Calculation 邏輯
+     */
+    private Mono<Void> processBatchDamageCalculation(AsyncMessageDTO message) {
+        String requestId = message.getRequestId();
+        Object payload = message.getPayload();
+        logger.info("🎯 處理 Batch Damage Calculation: requestId={}", requestId);
 
-                    return namesMono
-                            .flatMap(names -> weaponDamageService.calculateBatchDamageWithWeapon(names))
-                            .flatMap(result -> asyncResultService.sendCompletedResultReactive(requestId, result))
-                            .doOnSuccess(v -> delivery.ack())
-                            .onErrorResume(e -> {
-                                logger.error("❌ Batch Damage Calc 失敗: {}", e.getMessage());
-                                return asyncResultService
-                                        .sendFailedResultReactive(requestId, "計算批量傷害失敗: " + e.getMessage())
-                                        .doFinally(s -> delivery.nack(false));
-                            });
-                })
-                .then();
+        return Mono.fromCallable(() -> {
+            if (!(payload instanceof java.util.List)) {
+                throw new IllegalArgumentException("無效的 payload 格式，預期為名稱列表");
+            }
+            return objectMapper.convertValue(payload,
+                    new com.fasterxml.jackson.core.type.TypeReference<java.util.List<String>>() {
+                    });
+        })
+                .flatMap(names -> weaponDamageService.calculateBatchDamageWithWeapon(names))
+                .flatMap(result -> asyncResultService.sendCompletedResultReactive(requestId, result))
+                .onErrorResume(e -> {
+                    logger.error("❌ Batch Damage Calculation 失敗: requestId={}, error={}", requestId, e.getMessage());
+                    return asyncResultService.sendFailedResultReactive(requestId, "計算批量傷害失敗: " + e.getMessage());
+                });
     }
 
     @PreDestroy
