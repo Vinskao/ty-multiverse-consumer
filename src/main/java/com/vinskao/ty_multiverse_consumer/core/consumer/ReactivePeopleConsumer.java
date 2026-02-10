@@ -49,6 +49,9 @@ public class ReactivePeopleConsumer {
     private PeopleService peopleService;
 
     @Autowired
+    private WeaponDamageService weaponDamageService;
+
+    @Autowired
     private AsyncResultService asyncResultService;
 
     @Autowired(required = false)
@@ -90,6 +93,7 @@ public class ReactivePeopleConsumer {
                             .subscribe(tick2 -> {
                                 startDeleteAllPeopleConsumer();
                                 startDamageCalculationConsumer();
+                                startBatchDamageCalculationConsumer();
                                 logger.info("✅ Reactive People Consumer 全部啟動完成");
                             });
                 });
@@ -217,6 +221,22 @@ public class ReactivePeopleConsumer {
                         .subscribe());
 
         logger.info("📡 啟動 People Damage Calculation Reactive Consumer (concurrency=5)");
+    }
+
+    /**
+     * People Batch Damage Calculation 消費者
+     */
+    private void startBatchDamageCalculationConsumer() {
+        subscriptions.add(
+                reactiveReceiver
+                        .consumeManualAck(RabbitMQConfig.PEOPLE_BATCH_DAMAGE_QUEUE, new ConsumeOptions().qos(2))
+                        .flatMap(this::handleBatchDamageCalculation, 2)
+                        .doOnError(error -> logger.error("❌ People Batch Damage Calculation 消費者發生錯誤: {}",
+                                error.getMessage()))
+                        .retryWhen(defaultRetry)
+                        .subscribe());
+
+        logger.info("📡 啟動 People Batch Damage Reactive Consumer (concurrency=2)");
     }
 
     /**
@@ -527,6 +547,41 @@ public class ReactivePeopleConsumer {
                             .onErrorResume(e -> {
                                 logger.error("❌ Damage Calc 失敗: {}", e.getMessage());
                                 return asyncResultService.sendFailedResultReactive(requestId, e.getMessage())
+                                        .doFinally(s -> delivery.nack(false));
+                            });
+                })
+                .then();
+    }
+
+    /**
+     * 處理 Batch Damage Calculation 請求
+     */
+    private Mono<Void> handleBatchDamageCalculation(AcknowledgableDelivery delivery) {
+        String messageJson = new String(delivery.getBody());
+        return Mono.fromCallable(() -> objectMapper.readValue(messageJson, AsyncMessageDTO.class))
+                .flatMap(message -> {
+                    String requestId = message.getRequestId();
+                    Object payload = message.getPayload();
+                    logger.info("🎯 處理 Batch Damage Calculation: requestId={}", requestId);
+
+                    return Mono.fromCallable(() -> {
+                        if (payload instanceof List) {
+                            return objectMapper.convertValue(payload,
+                                    new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {
+                                    });
+                        }
+                        throw new IllegalArgumentException("無效的 payload 格式，預期為名稱列表");
+                    })
+                            .flatMap(names -> weaponDamageService.calculateBatchDamageWithWeapon(names))
+                            .flatMap(result -> asyncResultService.sendCompletedResultReactive(requestId, result))
+                            .doOnSuccess(v -> {
+                                logger.info("🎉 Batch Damage Calculation 處理完成: requestId={}", requestId);
+                                delivery.ack();
+                            })
+                            .onErrorResume(e -> {
+                                logger.error("❌ Batch Damage Calc 失敗: {}", e.getMessage());
+                                return asyncResultService
+                                        .sendFailedResultReactive(requestId, "計算批量傷害失敗: " + e.getMessage())
                                         .doFinally(s -> delivery.nack(false));
                             });
                 })
