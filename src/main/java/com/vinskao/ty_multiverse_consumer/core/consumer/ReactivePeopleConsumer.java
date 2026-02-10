@@ -5,6 +5,7 @@ import com.vinskao.ty_multiverse_consumer.config.RabbitMQConfig;
 import com.vinskao.ty_multiverse_consumer.core.dto.AsyncMessageDTO;
 import com.vinskao.ty_multiverse_consumer.core.service.AsyncResultService;
 import com.vinskao.ty_multiverse_consumer.module.people.service.PeopleService;
+import com.vinskao.ty_multiverse_consumer.module.people.service.WeaponDamageService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
