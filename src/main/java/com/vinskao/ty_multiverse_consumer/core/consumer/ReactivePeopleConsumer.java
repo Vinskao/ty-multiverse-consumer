@@ -565,20 +565,24 @@ public class ReactivePeopleConsumer {
                     Object payload = message.getPayload();
                     logger.info("🎯 處理 Batch Damage Calculation: requestId={}", requestId);
 
-                    return Mono.fromCallable(() -> {
+                    Mono<List<String>> namesMono;
+                    try {
                         if (payload instanceof List) {
-                            return objectMapper.convertValue(payload,
+                            List<String> names = objectMapper.convertValue(payload,
                                     new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {
                                     });
+                            namesMono = Mono.just(names);
+                        } else {
+                            namesMono = Mono.error(new IllegalArgumentException("無效的 payload 格式，預期為名稱列表"));
                         }
-                        throw new IllegalArgumentException("無效的 payload 格式，預期為名稱列表");
-                    })
+                    } catch (Exception e) {
+                        namesMono = Mono.error(e);
+                    }
+
+                    return namesMono
                             .flatMap(names -> weaponDamageService.calculateBatchDamageWithWeapon(names))
                             .flatMap(result -> asyncResultService.sendCompletedResultReactive(requestId, result))
-                            .doOnSuccess(v -> {
-                                logger.info("🎉 Batch Damage Calculation 處理完成: requestId={}", requestId);
-                                delivery.ack();
-                            })
+                            .doOnSuccess(v -> delivery.ack())
                             .onErrorResume(e -> {
                                 logger.error("❌ Batch Damage Calc 失敗: {}", e.getMessage());
                                 return asyncResultService
