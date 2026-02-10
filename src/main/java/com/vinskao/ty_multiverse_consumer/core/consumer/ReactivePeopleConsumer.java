@@ -1,7 +1,6 @@
 package com.vinskao.ty_multiverse_consumer.core.consumer;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.vinskao.ty_multiverse_consumer.config.RabbitMQConfig;
 import com.vinskao.ty_multiverse_consumer.core.dto.AsyncMessageDTO;
 import com.vinskao.ty_multiverse_consumer.core.service.AsyncResultService;
@@ -18,8 +17,6 @@ import reactor.rabbitmq.ConsumeOptions;
 import reactor.rabbitmq.Receiver;
 import com.vinskao.ty_multiverse_consumer.service.RedisService;
 import java.time.Duration;
-import java.util.List;
-import java.util.Map;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import reactor.core.Disposable;
@@ -109,8 +106,6 @@ public class ReactivePeopleConsumer {
      * 使用 flatMap(concurrency=2) 控制並發，與 DB 連線池協調
      */
     private void startGetAllPeopleConsumer() {
-        Disposable.Composite batchSubscriptions = Disposables.composite();
-
         subscriptions.add(
                 reactiveReceiver
                         .consumeManualAck(RabbitMQConfig.PEOPLE_GET_ALL_QUEUE, new ConsumeOptions().qos(2))

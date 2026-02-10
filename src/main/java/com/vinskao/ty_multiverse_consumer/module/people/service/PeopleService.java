@@ -17,7 +17,6 @@ import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.core.type.TypeReference;
 
 /**
  * 角色服務類
@@ -562,7 +561,7 @@ public class PeopleService {
     @Transactional(readOnly = false)
     public Mono<People> insertPersonFromObject(Object payload) {
         return Mono.fromCallable(() -> objectMapper.convertValue(payload, People.class))
-            .flatMap(this::insertPerson);
+                .flatMap(this::insertPerson);
     }
 
     /**
@@ -571,7 +570,7 @@ public class PeopleService {
     @Transactional(readOnly = false)
     public Mono<People> updatePersonFromObject(Object payload) {
         return Mono.fromCallable(() -> objectMapper.convertValue(payload, People.class))
-            .flatMap(this::updatePerson);
+                .flatMap(this::updatePerson);
     }
 
     /**
@@ -579,9 +578,9 @@ public class PeopleService {
      */
     @Transactional(readOnly = false)
     public Flux<People> insertMultiplePeopleFromObject(Object payload) {
-        return Mono.fromCallable(() -> 
-            objectMapper.convertValue(payload, new com.fasterxml.jackson.core.type.TypeReference<List<People>>() {})
-        ).flatMapMany(this::saveAllPeople);
+        return Mono.fromCallable(() -> objectMapper.convertValue(payload,
+                new com.fasterxml.jackson.core.type.TypeReference<List<People>>() {
+                })).flatMapMany(this::saveAllPeople);
     }
 
     /**
@@ -589,10 +588,10 @@ public class PeopleService {
      */
     public Mono<Integer> calculateDamageWithWeapon(String characterName) {
         return getPeopleByName(characterName)
-            .map(p -> {
-                int base = (p.getPhysicPower() != null ? p.getPhysicPower() : 10);
-                return base + 5; // 簡易版計算
-            })
-            .defaultIfEmpty(15);
+                .map(p -> {
+                    int base = (p.getPhysicPower() != null ? p.getPhysicPower() : 10);
+                    return base + 5; // 簡易版計算
+                })
+                .defaultIfEmpty(15);
     }
 }
