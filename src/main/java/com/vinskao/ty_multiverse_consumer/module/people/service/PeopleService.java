@@ -157,17 +157,17 @@ public class PeopleService {
 
     /**
      * 保存所有角色（使用 DatabaseClient 執行完整 INSERT）
+     * 不加 @Transactional 以允許多連接並發，避免單一連線非多路復用(non-multiplexing)錯誤
      *
      * @param peopleList 要保存的角色列表
      * @return 保存後的角色列表
      */
-    @Transactional(readOnly = false)
     public Flux<People> saveAllPeople(List<People> peopleList) {
-        logger.info("開始批量保存角色，總數量: {}", peopleList.size());
+        logger.info("開始批量保存角色，總數量: {}，使用並發寫入", peopleList.size());
 
         return Flux.fromIterable(peopleList)
                 .index()
-                .concatMap(tuple -> { // 使用 concatMap 順序執行，避免並發導致的事務問題
+                .flatMap(tuple -> { // 使用 flatMap 並發執行，提高插入速度
                     Long index = tuple.getT1();
                     People people = tuple.getT2();
 
@@ -192,7 +192,7 @@ public class PeopleService {
                                     people.getName(), savedPeople.getVersion()))
                             .doOnError(e -> logger.error("保存角色失敗: name={}, error={}",
                                     people.getName(), e.getMessage(), e));
-                });
+                }, 5); // 限制最大並發數為 5 (與連線池 max-size 一致)
     }
 
     /**
