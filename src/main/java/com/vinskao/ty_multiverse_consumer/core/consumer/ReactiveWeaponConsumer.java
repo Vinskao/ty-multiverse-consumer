@@ -6,6 +6,7 @@ import com.vinskao.ty_multiverse_consumer.core.dto.AsyncMessageDTO;
 import com.vinskao.ty_multiverse_consumer.core.service.AsyncResultService;
 import com.vinskao.ty_multiverse_consumer.module.weapon.domain.vo.Weapon;
 import com.vinskao.ty_multiverse_consumer.module.weapon.service.WeaponService;
+import com.vinskao.ty_multiverse_consumer.core.service.ResourceCacheManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -51,6 +52,9 @@ public class ReactiveWeaponConsumer {
 
     @Autowired
     private AsyncResultService asyncResultService;
+
+    @Autowired
+    private ResourceCacheManager cacheManager;
 
     // 用於管理所有消費者的訂閱
     private final Disposable.Composite subscriptions = Disposables.composite();
@@ -210,20 +214,28 @@ public class ReactiveWeaponConsumer {
                 String requestId = message.getRequestId();
                 logger.info("📝 處理請求: requestId={}", requestId);
 
-                return weaponService.getAllWeapons()
-                        .collectList()
-                        .flatMap(weaponList -> {
-                            logger.info("✅ 查詢完成: 共 {} 個武器, requestId={}", weaponList.size(), requestId);
-                            return asyncResultService.sendCompletedResultReactive(requestId, weaponList)
-                                    .doOnSuccess(v -> {
-                                        logger.info("🎉 Weapon Get-All 處理完成: requestId={}", requestId);
-                                        delivery.ack();
-                                    })
-                                    .doOnError(error -> {
-                                        logger.error("❌ Weapon Get-All 發送結果失敗: requestId={}, error={}", requestId,
-                                                error.getMessage());
-                                        delivery.nack(false);
-                                    });
+                String cacheKey = cacheManager.getGetAllKey("weapon");
+
+                return cacheManager.getCache(cacheKey)
+                        .flatMap(cached -> {
+                            if (cached != null) {
+                                logger.info("🗃️ 命中武器快取: {}", cacheKey);
+                                return asyncResultService.sendCompletedResultReactive(requestId, cached);
+                            }
+                            return Mono.empty();
+                        })
+                        .switchIfEmpty(weaponService.getAllWeapons()
+                                .collectList()
+                                .flatMap(weaponList -> {
+                                    logger.info("✅ 查詢完成: 共 {} 個武器, requestId={}", weaponList.size(), requestId);
+
+                                    return cacheManager.putCache(cacheKey, weaponList, Duration.ofSeconds(60))
+                                            .then(asyncResultService.sendCompletedResultReactive(requestId,
+                                                    weaponList));
+                                }))
+                        .doOnSuccess(v -> {
+                            logger.info("🎉 Weapon Get-All 處理完成: requestId={}", requestId);
+                            delivery.ack();
                         })
                         .onErrorResume(error -> {
                             logger.error("❌ Weapon Get-All 處理失敗: requestId={}, error={}", requestId,
@@ -349,6 +361,7 @@ public class ReactiveWeaponConsumer {
                 logger.info("📝 處理請求: weapon={}, requestId={}", weapon.getName(), requestId);
 
                 return weaponService.saveWeapon(weapon)
+                        .flatMap(savedWeapon -> cacheManager.evictCache("weapon").thenReturn(savedWeapon))
                         .flatMap(savedWeapon -> {
                             logger.info("✅ 保存成功: weapon={}, requestId={}", savedWeapon.getName(), requestId);
                             return asyncResultService.sendCompletedResultReactive(requestId, savedWeapon)
@@ -453,6 +466,7 @@ public class ReactiveWeaponConsumer {
                 logger.info("📝 處理請求: weaponId={}, requestId={}", weaponId, requestId);
 
                 return weaponService.deleteWeapon(weaponId)
+                        .then(cacheManager.evictCache("weapon"))
                         .then(Mono.defer(() -> {
                             logger.info("✅ 刪除成功: weaponId={}, requestId={}", weaponId, requestId);
                             return asyncResultService.sendCompletedResultReactive(requestId, true)
@@ -495,6 +509,7 @@ public class ReactiveWeaponConsumer {
                 logger.info("📝 處理請求: requestId={}", requestId);
 
                 return weaponService.deleteAllWeapons()
+                        .then(cacheManager.evictCache("weapon"))
                         .then(Mono.defer(() -> {
                             logger.info("✅ 批量刪除完成, requestId={}", requestId);
                             return asyncResultService.sendCompletedResultReactive(requestId, "所有武器已刪除")

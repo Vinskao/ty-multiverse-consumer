@@ -13,6 +13,7 @@ import com.vinskao.ty_multiverse_consumer.core.service.AsyncResultService;
 import com.vinskao.ty_multiverse_consumer.module.people.domain.vo.People;
 import com.vinskao.ty_multiverse_consumer.module.people.service.PeopleService;
 import com.vinskao.ty_multiverse_consumer.module.people.service.WeaponDamageService;
+import com.vinskao.ty_multiverse_consumer.core.service.ResourceCacheManager;
 
 import java.util.List;
 
@@ -27,7 +28,6 @@ import java.util.List;
  * @since 2024
  */
 @Component
-@ConditionalOnProperty(name = "spring.rabbitmq.enabled", havingValue = "true")
 @ConditionalOnProperty(name = "spring.rabbitmq.legacy.enabled", havingValue = "true", matchIfMissing = false)
 public class PeopleConsumer {
 
@@ -44,6 +44,9 @@ public class PeopleConsumer {
 
     @Autowired
     private WeaponDamageService weaponDamageService;
+
+    @Autowired(required = false)
+    private ResourceCacheManager cacheManager;
 
     /**
      * 監聽 People 獲取所有請求 - 完全符合 Producer 規範
@@ -162,8 +165,13 @@ public class PeopleConsumer {
 
             logger.info("開始刪除所有角色: requestId={}", requestId);
 
-            // 處理請求
-            peopleService.deleteAllPeople();
+            // 處理請求（修正：必須 .block() 才會真正執行）
+            peopleService.deleteAllPeople().block();
+
+            // 清除 Redis 快取
+            if (cacheManager != null) {
+                cacheManager.evictCache("people").block();
+            }
 
             logger.info("成功刪除所有角色: requestId={}", requestId);
 

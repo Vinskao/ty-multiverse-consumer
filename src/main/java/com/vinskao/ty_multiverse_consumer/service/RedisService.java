@@ -14,15 +14,18 @@ public class RedisService {
 
     private static final Logger logger = LoggerFactory.getLogger(RedisService.class);
 
+    private final ReactiveRedisOperations<String, String> redisOps;
     private final ReactiveValueOperations<String, String> values;
 
     public RedisService(ReactiveRedisOperations<String, String> redisOperations) {
+        this.redisOps = redisOperations;
         this.values = redisOperations.opsForValue();
     }
 
     public Mono<Boolean> setIfAbsent(String key, String value, Duration ttl) {
         return values.setIfAbsent(key, value, ttl)
-                .doOnNext(set -> logger.debug("Redis SETNX {} => {} (ttl={}s)", key, set, ttl != null ? ttl.toSeconds() : null));
+                .doOnNext(set -> logger.debug("Redis SETNX {} => {} (ttl={}s)", key, set,
+                        ttl != null ? ttl.toSeconds() : null));
     }
 
     public Mono<String> get(String key) {
@@ -32,11 +35,15 @@ public class RedisService {
 
     public Mono<Boolean> set(String key, String value, Duration ttl) {
         if (ttl != null) {
-            return values.set(key, value, ttl).doOnNext(ok -> logger.debug("Redis SET {} ttl={}s", key, ttl.toSeconds()));
+            return values.set(key, value, ttl)
+                    .doOnNext(ok -> logger.debug("Redis SET {} ttl={}s", key, ttl.toSeconds()));
         }
         return values.set(key, value).doOnNext(ok -> logger.debug("Redis SET {}", key));
     }
+
+    public Mono<Boolean> delete(String key) {
+        return redisOps.delete(key)
+                .map(count -> count > 0)
+                .doOnNext(deleted -> logger.debug("Redis DEL {} => {}", key, deleted));
+    }
 }
-
-
-

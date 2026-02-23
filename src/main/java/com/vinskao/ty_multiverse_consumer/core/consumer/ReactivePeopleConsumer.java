@@ -6,6 +6,7 @@ import com.vinskao.ty_multiverse_consumer.core.dto.AsyncMessageDTO;
 import com.vinskao.ty_multiverse_consumer.core.service.AsyncResultService;
 import com.vinskao.ty_multiverse_consumer.module.people.service.PeopleService;
 import com.vinskao.ty_multiverse_consumer.module.people.service.WeaponDamageService;
+import com.vinskao.ty_multiverse_consumer.core.service.ResourceCacheManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -57,6 +58,9 @@ public class ReactivePeopleConsumer {
 
     @Autowired(required = false)
     private RedisService redisService;
+
+    @Autowired
+    private ResourceCacheManager cacheManager;
 
     // 用於管理所有消費者的訂閱
     private final Disposable.Composite subscriptions = Disposables.composite();
@@ -254,9 +258,9 @@ public class ReactivePeopleConsumer {
 
                     // 嘗試快取與冪等
                     String idempotentKey = "idempotent:people:getAll:" + requestId;
-                    String cacheKey = "people:getAll";
+                    String cacheKey = cacheManager.getGetAllKey("people");
 
-                    Mono<Void> cachedFlow = (redisService == null ? Mono.<String>empty() : redisService.get(cacheKey))
+                    Mono<Void> cachedFlow = cacheManager.getCache(cacheKey)
                             .flatMap(cached -> {
                                 if (cached != null) {
                                     logger.info("🗃️ 命中快取: {}", cacheKey);
@@ -269,11 +273,8 @@ public class ReactivePeopleConsumer {
                             .collectList()
                             .flatMap(peopleList -> {
                                 logger.info("✅ 查詢完成: 共 {} 個角色, requestId={}", peopleList.size(), requestId);
-                                Mono<Void> cacheWrite = (redisService == null)
-                                        ? Mono.empty()
-                                        : Mono.fromCallable(() -> objectMapper.writeValueAsString(peopleList))
-                                                .flatMap(json -> redisService
-                                                        .set(cacheKey, json, Duration.ofSeconds(60)).then());
+                                Mono<Void> cacheWrite = cacheManager.putCache(cacheKey, peopleList,
+                                        Duration.ofSeconds(60));
                                 Mono<Boolean> idemSet = (redisService == null)
                                         ? Mono.just(true)
                                         : redisService.setIfAbsent(idempotentKey, "1", Duration.ofMinutes(5));
@@ -393,7 +394,8 @@ public class ReactivePeopleConsumer {
                     return peopleService.deleteAllPeopleReactive()
                             .flatMap(deletedCount -> {
                                 logger.info("✅ 刪除完成: 共刪除 {} 個角色, requestId={}", deletedCount, requestId);
-                                return asyncResultService.sendCompletedResultReactive(requestId, null);
+                                return cacheManager.evictCache("people")
+                                        .then(asyncResultService.sendCompletedResultReactive(requestId, null));
                             })
                             .doOnSuccess(v -> {
                                 logger.info("🎉 People Delete-All 處理完成: requestId={}", requestId);
@@ -429,15 +431,25 @@ public class ReactivePeopleConsumer {
         })
                 .flatMap(message -> {
                     String requestId = message.getRequestId();
+                    String cacheKey = cacheManager.getCacheKey("people", "names");
                     logger.info("📝 處理請求: requestId={}", requestId);
 
-                    return peopleService.getAllPeopleOptimized()
-                            .map(person -> person.getName())
-                            .collectList()
-                            .flatMap(names -> {
-                                logger.info("✅ 查詢完成: 共 {} 個名稱, requestId={}", names.size(), requestId);
-                                return asyncResultService.sendCompletedResultReactive(requestId, names);
+                    return cacheManager.getCache(cacheKey)
+                            .flatMap(cached -> {
+                                if (cached != null) {
+                                    logger.info("🗃️ 命中名稱快取: {}", cacheKey);
+                                    return asyncResultService.sendCompletedResultReactive(requestId, cached);
+                                }
+                                return Mono.empty();
                             })
+                            .switchIfEmpty(peopleService.getAllPeopleOptimized()
+                                    .map(person -> person.getName())
+                                    .collectList()
+                                    .flatMap(names -> {
+                                        logger.info("✅ 查詢完成: 共 {} 個名稱, requestId={}", names.size(), requestId);
+                                        return cacheManager.putCache(cacheKey, names, Duration.ofMinutes(5))
+                                                .then(asyncResultService.sendCompletedResultReactive(requestId, names));
+                                    }))
                             .doOnSuccess(v -> {
                                 logger.info("🎉 People Get-Names 處理完成: requestId={}", requestId);
                                 delivery.ack();
@@ -471,6 +483,7 @@ public class ReactivePeopleConsumer {
                     logger.info("🎯 處理 People Insert: requestId={}", requestId);
 
                     return peopleService.insertPersonFromObject(payload)
+                            .flatMap(result -> cacheManager.evictCache("people").thenReturn(result))
                             .flatMap(result -> asyncResultService.sendCompletedResultReactive(requestId, result))
                             .doOnSuccess(v -> delivery.ack())
                             .onErrorResume(e -> {
@@ -494,6 +507,7 @@ public class ReactivePeopleConsumer {
                     logger.info("🎯 處理 People Update: requestId={}", requestId);
 
                     return peopleService.updatePersonFromObject(payload)
+                            .flatMap(result -> cacheManager.evictCache("people").thenReturn(result))
                             .flatMap(result -> asyncResultService.sendCompletedResultReactive(requestId, result))
                             .doOnSuccess(v -> delivery.ack())
                             .onErrorResume(e -> {
@@ -518,6 +532,7 @@ public class ReactivePeopleConsumer {
 
                     return peopleService.insertMultiplePeopleFromObject(payload)
                             .collectList()
+                            .flatMap(result -> cacheManager.evictCache("people").thenReturn(result))
                             .flatMap(result -> asyncResultService.sendCompletedResultReactive(requestId, result))
                             .doOnSuccess(v -> delivery.ack())
                             .onErrorResume(e -> {
