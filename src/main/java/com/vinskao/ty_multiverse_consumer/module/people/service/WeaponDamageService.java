@@ -71,8 +71,17 @@ public class WeaponDamageService {
                     damageResults.put(name, damage);
                 }
 
+                Map<String, Integer> sortedDamageResults = damageResults.entrySet()
+                        .stream()
+                        .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
+                        .collect(Collectors.toMap(
+                                Map.Entry::getKey,
+                                Map.Entry::getValue,
+                                (e1, e2) -> e1,
+                                java.util.LinkedHashMap::new));
+
                 Map<String, Object> finalResult = new HashMap<>();
-                finalResult.put("damageResults", damageResults);
+                finalResult.put("damageResults", sortedDamageResults);
                 finalResult.put("notFoundNames", notFoundNames);
                 return finalResult;
             });
