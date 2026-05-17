@@ -111,6 +111,18 @@ docker-compose -f docker-compose.dev.yml up -d
 tail -f target/surefire-reports/*.txt
 ```
 
+## Kubernetes Operations
+
+### Consumer Readiness and RabbitMQ Consumers
+
+Production deployments must keep the consumer container CPU limit high enough for Spring Boot, R2DBC, Redis, and RabbitMQ consumers to start promptly. Do not cap this service at `50m` CPU: that caused slow startup, RabbitMQ business queues (`weapon-save`, `weapon-delete-all`, `people-*`) to have `0` consumers, and gateway requests to time out as ingress `504`.
+
+Required deployment guardrails:
+- Set `resources.requests.cpu` to at least `50m` and `resources.limits.cpu` to `1`.
+- Keep `startupProbe`, `readinessProbe`, and `livenessProbe` on `/actuator/health`, `/actuator/health/readiness`, and `/actuator/health/liveness`.
+- After deploying, verify RabbitMQ has active consumers for business queues, especially `weapon-save`, `weapon-delete-all`, `people-insert-multiple`, `people-delete-all`, and `async-result`.
+- If `/tymg` starts returning ingress `504`, first check RabbitMQ queue consumers/backlog before assuming the database is the root cause.
+
 ## Code Style Guidelines
 
 ### Java Code Style

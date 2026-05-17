@@ -213,6 +213,14 @@ public class GlobalExceptionHandler {
 
 ```mermaid
 graph TB
+    subgraph "☸️ Kubernetes Runtime"
+        Kubelet[Kubelet<br/>Probe Manager]
+        StartupProbe[startupProbe<br/>/actuator/health<br/>慢啟動保護]
+        ReadinessProbe[readinessProbe<br/>/actuator/health/readiness<br/>控制 Service Endpoints]
+        LivenessProbe[livenessProbe<br/>/actuator/health/liveness<br/>失敗時重啟 Container]
+        Pod[ty-multiverse-consumer Pod<br/>CPU request 50m<br/>CPU limit 1]
+    end
+
     subgraph "🚀 外部請求"
         Client[HTTP Client<br/>👂 Subscriber]
     end
@@ -235,6 +243,7 @@ graph TB
 
     subgraph "🐰 Reactor RabbitMQ"
         RabbitMQ[Reactive Consumers<br/>Manual ACK/NACK<br/>👂 Subscriber]
+        QueueConsumers[Business Queue Consumers<br/>weapon-save / weapon-delete-all<br/>people-*]
     end
 
     subgraph "📨 Async Result Service"
@@ -248,6 +257,18 @@ graph TB
     subgraph "📬 RabbitMQ Server"
         MQ[(RabbitMQ<br/>Queues & Exchanges<br/>👂 Subscriber)]
     end
+
+    %% Kubernetes 健康檢查與自動恢復
+    Kubelet --> StartupProbe
+    Kubelet --> ReadinessProbe
+    Kubelet --> LivenessProbe
+    StartupProbe --> Pod
+    ReadinessProbe --> Pod
+    LivenessProbe --> Pod
+    LivenessProbe -.->|"failed threshold reached<br/>restart container"| Pod
+    ReadinessProbe -.->|"failed<br/>remove from endpoints"| Pod
+    Pod --> Netty
+    Pod --> RabbitMQ
 
     %% Reactive Streams 觀察者模式流程
     Client -.->|"subscribe()"| Netty
@@ -273,15 +294,19 @@ graph TB
     Service --> AsyncService
     AsyncService --> MQ
     MQ --> RabbitMQ
+    RabbitMQ --> QueueConsumers
+    QueueConsumers --> Service
     RabbitMQ --> AsyncService
 
     %% 樣式定義
+    classDef k8sLayer fill:#e3f2fd,stroke:#0d47a1,stroke-width:2px
     classDef webLayer fill:#e1f5fe,stroke:#01579b,stroke-width:2px
     classDef serviceLayer fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
     classDef dataLayer fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
     classDef mqLayer fill:#fff3e0,stroke:#e65100,stroke-width:2px
     classDef external fill:#fafafa,stroke:#424242,stroke-width:1px
 
+    class Kubelet,StartupProbe,ReadinessProbe,LivenessProbe,Pod k8sLayer
     class Client,Netty external
     class Controller webLayer
     class Service serviceLayer
@@ -308,7 +333,14 @@ Producer → RabbitMQ Queue → Reactive Consumer → Service → DB
 AsyncResultService → RabbitMQ → Producer (回應)
 ```
 
-##### **3. 關鍵技術特點**
+##### **3. Kubernetes 健康檢查與自動恢復**
+- **startupProbe**：等待 Spring Boot、R2DBC、Redis、RabbitMQ 初始化完成；啟動期間會暫停 liveness 判斷，避免慢啟動被誤殺。
+- **readinessProbe**：失敗時不會重啟 container，只會把 pod 從 Kubernetes Service endpoints 移除，避免未就緒的 pod 接流量。
+- **livenessProbe**：失敗達到門檻後 Kubernetes 會自動重啟 container。
+- **RabbitMQ consumers**：Kubernetes probe 只檢查 actuator health，不會直接保證 `weapon-save`、`weapon-delete-all`、`people-*` consumer 都掛上；若再出現 `/tymg` 504，需同時檢查 RabbitMQ queue consumers/backlog。
+- **CPU guardrail**：consumer 不可再限制為 `50m` CPU limit；目前部署要求 `requests.cpu=50m`、`limits.cpu=1`，避免 reactive consumers 啟動過慢導致 queue 沒有訂閱者。
+
+##### **4. 關鍵技術特點**
 - **非阻塞 I/O**：Netty 處理所有 HTTP 請求
 - **Reactive Streams**：Mono/Flux 貫穿整個架構
 - **背壓控制**：從 MQ 到 DB 的流量控制
@@ -2216,4 +2248,3 @@ spring:
 4. **Producer 整合測試**：確保異步消息流完整性
 
 ---
-
