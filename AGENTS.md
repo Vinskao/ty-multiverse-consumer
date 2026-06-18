@@ -313,3 +313,59 @@ GATEWAY_URL=http://localhost:8082
 SPRING_PROFILES_ACTIVE=dev
 LOGGING_LEVEL_COM_TY=DEBUG
 ```
+
+---
+
+## 本地啟動
+
+```bash
+# 先確保 common 模組已安裝
+cd ../ty-multiverse-common
+mvn clean install
+
+# 啟動
+cd ../ty-multiverse-consumer
+cp src/main/resources/env/local.properties.example src/main/resources/env/local.properties
+mvn spring-boot:run -Dspring-boot.run.profiles=local
+```
+
+## 啟用傳統 MQ 消費者（測試用）
+
+在 `application-local.yml` 中加入：
+```yaml
+spring:
+  rabbitmq:
+    legacy:
+      enabled: true
+```
+
+## 本地 Redis 測試
+
+```bash
+# 啟動 Redis
+docker run -p 6379:6379 --name dev-redis -d redis:7
+
+# 設定環境變數
+export REDIS_HOST=localhost
+export REDIS_CUSTOM_PORT=6379
+export REDIS_PASSWORD=
+
+# 驗證 key
+redis-cli KEYS people:*
+redis-cli TTL people:getAll
+redis-cli GET "idempotent:people:getAll:<requestId>"
+```
+
+## K8s Consumer CPU 設定注意
+
+Consumer 不可限制 `cpu.limit=50m`，reactive consumer 啟動需要更多 CPU。  
+正確設定：`requests.cpu=50m`、`limits.cpu=1`，避免 queue 沒有訂閱者導致 504。
+
+## Common 模組更新流程
+
+```bash
+cd ../ty-multiverse-common
+mvn clean install
+cd ../ty-multiverse-consumer
+mvn clean compile  # 自動使用新版本
+```
