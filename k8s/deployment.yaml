@@ -32,6 +32,8 @@ data:
   LOGGING_LEVEL: "INFO"
   LOGGING_LEVEL_SPRINGFRAMEWORK: "INFO"
   PROJECT_ENV: "platform"
+  # 內部 k8s postgres 不支援 SSL，關閉 R2DBC SSL（非敏感設定，可進 git）
+  SPRING_DATASOURCE_SSLMODE: "disable"
 
 ---
 
@@ -153,6 +155,11 @@ spec:
             secretKeyRef:
               name: ty-multiverse-consumer-secrets
               key: SPRING_DATASOURCE_DBNAME
+        - name: SPRING_DATASOURCE_SSLMODE
+          valueFrom:
+            configMapKeyRef:
+              name: ty-multiverse-consumer-config
+              key: SPRING_DATASOURCE_SSLMODE
         - name: KEYCLOAK_AUTH_SERVER_URL
           valueFrom:
             secretKeyRef:
