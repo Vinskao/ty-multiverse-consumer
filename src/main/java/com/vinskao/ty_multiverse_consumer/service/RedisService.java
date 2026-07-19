@@ -46,4 +46,11 @@ public class RedisService {
                 .map(count -> count > 0)
                 .doOnNext(deleted -> logger.debug("Redis DEL {} => {}", key, deleted));
     }
+
+    public Mono<Long> deleteByPattern(String pattern) {
+        return redisOps.keys(pattern)
+                .flatMap(redisOps::delete)
+                .reduce(0L, Long::sum)
+                .doOnNext(count -> logger.debug("Redis DEL pattern {} => {} key(s)", pattern, count));
+    }
 }

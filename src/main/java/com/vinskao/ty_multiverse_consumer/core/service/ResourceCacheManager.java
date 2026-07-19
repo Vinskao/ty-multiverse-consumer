@@ -47,10 +47,16 @@ public class ResourceCacheManager {
             return Mono.empty();
         }
 
-        // 清理 getAll 與 names (如果有的話)
-        return Mono.when(
+        Mono<?> resourceCaches = Mono.when(
                 redisService.delete(getGetAllKey(resourceName)),
-                redisService.delete(getCacheKey(resourceName, "names"))).then()
+                redisService.delete(getCacheKey(resourceName, "names")));
+
+        // 戰力由人物能力與武器共同決定；任一資源異動都必須使戰力快取失效。
+        Mono<?> damageCaches = ("people".equals(resourceName) || "weapon".equals(resourceName))
+                ? redisService.deleteByPattern("damage-calculations::*")
+                : Mono.empty();
+
+        return Mono.when(resourceCaches, damageCaches).then()
                 .doOnSuccess(v -> logger.info("🗑️ 已清理資源 [{}] 的相關快取", resourceName));
     }
 
