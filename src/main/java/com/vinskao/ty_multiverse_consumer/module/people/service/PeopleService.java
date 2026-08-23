@@ -202,6 +202,10 @@ public class PeopleService {
      * @return 插入後的角色
      */
     private Mono<People> insertPeopleWithAllFields(People people) {
+        // ON CONFLICT (name) DO UPDATE：people 的 PK 是 name，同步來源（試算表）只要有兩列
+        // 同名，整批 165 筆就會因 duplicate key 全部 rollback，delete-all 已經跑過所以資料庫
+        // 直接變成 0 筆。改成 upsert 後重複名稱只是覆蓋，同步流程也因此可重跑（冪等）。
+        // 不更新 embedding / version：embedding 由別的流程產生，同步不帶這欄，覆蓋會把它清掉。
         String sql = """
                 INSERT INTO people (
                     name_original, code_name, name, physic_power, magic_power, utility_power,
@@ -220,6 +224,28 @@ public class PeopleService {
                     :email, :age, :proxy, :baseAttributes, :bonusAttributes, :stateAttributes,
                     :createdAt, :updatedAt, :version
                 )
+                ON CONFLICT (name) DO UPDATE SET
+                    name_original = EXCLUDED.name_original, code_name = EXCLUDED.code_name,
+                    physic_power = EXCLUDED.physic_power, magic_power = EXCLUDED.magic_power,
+                    utility_power = EXCLUDED.utility_power, dob = EXCLUDED.dob, race = EXCLUDED.race,
+                    attributes = EXCLUDED.attributes, gender = EXCLUDED.gender,
+                    ass_size = EXCLUDED.ass_size, boobs_size = EXCLUDED.boobs_size,
+                    height_cm = EXCLUDED.height_cm, weight_kg = EXCLUDED.weight_kg,
+                    profession = EXCLUDED.profession, combat = EXCLUDED.combat,
+                    favorite_foods = EXCLUDED.favorite_foods, job = EXCLUDED.job,
+                    physics = EXCLUDED.physics, known_as = EXCLUDED.known_as,
+                    personality = EXCLUDED.personality, interest = EXCLUDED.interest,
+                    likes = EXCLUDED.likes, dislikes = EXCLUDED.dislikes,
+                    concubine = EXCLUDED.concubine, faction = EXCLUDED.faction,
+                    army_id = EXCLUDED.army_id, army_name = EXCLUDED.army_name,
+                    dept_id = EXCLUDED.dept_id, dept_name = EXCLUDED.dept_name,
+                    origin_army_id = EXCLUDED.origin_army_id,
+                    origin_army_name = EXCLUDED.origin_army_name,
+                    gave_birth = EXCLUDED.gave_birth, email = EXCLUDED.email, age = EXCLUDED.age,
+                    proxy = EXCLUDED.proxy, base_attributes = EXCLUDED.base_attributes,
+                    bonus_attributes = EXCLUDED.bonus_attributes,
+                    state_attributes = EXCLUDED.state_attributes,
+                    updated_at = EXCLUDED.updated_at
                 """;
 
         DatabaseClient.GenericExecuteSpec spec = databaseClient.sql(sql);
