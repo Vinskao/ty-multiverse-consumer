@@ -32,6 +32,9 @@ spring:
     username: ${RABBITMQ_USERNAME:admin}
     password: ${RABBITMQ_PASSWORD:admin123}
     virtual-host: ${RABBITMQ_VIRTUAL_HOST:/}
+    # Outbox publisher 需要逐筆等待 broker 的 confirm，才敢回填 published_at
+    publisher-confirm-type: correlated
+    publisher-returns: true
 
   data:
     redis:
@@ -39,6 +42,17 @@ spring:
       port: ${REDIS_CUSTOM_PORT:6379}
       password: ${REDIS_PASSWORD:}
       timeout: 5s
+
+# Transactional Outbox 設定（業務事件 -> tymb-events stream）
+tymb:
+  outbox:
+    enabled: ${OUTBOX_ENABLED:true}
+    poll-interval-ms: ${OUTBOX_POLL_INTERVAL_MS:2000}
+    batch-size: ${OUTBOX_BATCH_SIZE:100}
+    confirm-timeout-ms: ${OUTBOX_CONFIRM_TIMEOUT_MS:5000}
+    backoff-base-ms: ${OUTBOX_BACKOFF_BASE_MS:2000}
+    max-backoff-ms: ${OUTBOX_MAX_BACKOFF_MS:300000}
+    alert-after-attempts: ${OUTBOX_ALERT_AFTER_ATTEMPTS:10}
 
 # 日誌配置
 logging:

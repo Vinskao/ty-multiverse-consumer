@@ -24,7 +24,7 @@
         <dependency>
             <groupId>tw.com.ty</groupId>
             <artifactId>ty-multiverse-common</artifactId>
-            <version>2.2.2</version>
+            <version>2.2.3</version>
         </dependency>
 
         <!-- AOP support for common module logging aspect -->
@@ -101,6 +101,12 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- Outbox 的 reactive 行為測試需要 StepVerifier -->
+        <dependency>
+            <groupId>io.projectreactor</groupId>
+            <artifactId>reactor-test</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>

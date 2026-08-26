@@ -14,8 +14,12 @@ import com.vinskao.ty_multiverse_consumer.module.people.domain.vo.People;
 import com.vinskao.ty_multiverse_consumer.module.people.service.PeopleService;
 import com.vinskao.ty_multiverse_consumer.module.people.service.WeaponDamageService;
 import com.vinskao.ty_multiverse_consumer.core.service.ResourceCacheManager;
+import com.vinskao.ty_multiverse_consumer.core.event.BusinessEventPayloads;
+import com.vinskao.ty_multiverse_consumer.core.event.BusinessEventTransaction;
+import tw.com.ty.common.event.BusinessEventType;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * People 請求處理 Consumer
@@ -47,6 +51,12 @@ public class PeopleConsumer {
 
     @Autowired(required = false)
     private ResourceCacheManager cacheManager;
+
+    @Autowired
+    private BusinessEventTransaction businessEvents;
+
+    @Autowired
+    private BusinessEventPayloads payloads;
 
     /**
      * 監聽 People 獲取所有請求 - 完全符合 Producer 規範
@@ -166,7 +176,14 @@ public class PeopleConsumer {
             logger.info("開始刪除所有角色: requestId={}", requestId);
 
             // 處理請求（修正：必須 .block() 才會真正執行）
-            peopleService.deleteAllPeople().block();
+            // 刪除與 outbox 事件在同一個 transaction 內完成
+            businessEvents.withSucceededEvent(
+                    peopleService.deleteAllPeople(),
+                    BusinessEventType.PEOPLE_DELETE_ALL,
+                    BusinessEventType.AGGREGATE_PEOPLE,
+                    null,
+                    Map.of(),
+                    requestId).block();
 
             // 清除 Redis 快取
             if (cacheManager != null) {
@@ -180,6 +197,9 @@ public class PeopleConsumer {
 
         } catch (Exception e) {
             logger.error("處理刪除所有角色請求失敗: {}", e.getMessage(), e);
+
+            businessEvents.recordFailedQuietly(BusinessEventType.PEOPLE_DELETE_ALL,
+                    BusinessEventType.AGGREGATE_PEOPLE, null, message.getRequestId(), e);
 
             // 發送錯誤結果給 Producer
             try {
@@ -206,8 +226,20 @@ public class PeopleConsumer {
             // 將 payload 轉換為 People 對象
             People person = objectMapper.convertValue(payload, People.class);
 
-            // 處理請求
-            People updatedPerson = peopleService.updatePerson(person).block();
+            // 處理請求：先讀出 before 快照，與更新和 outbox 事件同屬一個 transaction
+            People updatedPerson = businessEvents.withSucceededEvent(
+                    peopleService.findByName(person.getName())
+                            .map(payloads::snapshot)
+                            .defaultIfEmpty(Map.of())
+                            .flatMap(before -> peopleService.updatePerson(person)
+                                    .map(after -> new BusinessEventPayloads.Change<>(before, after))),
+                    BusinessEventType.PEOPLE_UPDATE,
+                    BusinessEventType.AGGREGATE_PEOPLE,
+                    change -> change.after().getName(),
+                    change -> payloads.diff(change.before(), change.after()),
+                    requestId)
+                    .map(BusinessEventPayloads.Change::after)
+                    .block();
 
             logger.info("成功更新角色: requestId={}, name={}", requestId, updatedPerson.getName());
 
@@ -216,6 +248,9 @@ public class PeopleConsumer {
 
         } catch (Exception e) {
             logger.error("處理更新角色請求失敗: {}", e.getMessage(), e);
+
+            businessEvents.recordFailedQuietly(BusinessEventType.PEOPLE_UPDATE,
+                    BusinessEventType.AGGREGATE_PEOPLE, null, message.getRequestId(), e);
 
             // 發送錯誤結果給 Producer
             try {
@@ -274,8 +309,14 @@ public class PeopleConsumer {
             // 將 payload 轉換為 People 對象
             People person = objectMapper.convertValue(payload, People.class);
 
-            // 處理請求
-            People savedPerson = peopleService.insertPerson(person).block();
+            // 處理請求：業務寫入與 outbox 事件在同一個 transaction 內完成
+            People savedPerson = businessEvents.withSucceededEvent(
+                    peopleService.insertPerson(person),
+                    BusinessEventType.PEOPLE_INSERT,
+                    BusinessEventType.AGGREGATE_PEOPLE,
+                    People::getName,
+                    saved -> Map.of("after", payloads.snapshot(saved)),
+                    requestId).block();
 
             logger.info("成功新增角色: requestId={}, name={}", requestId, savedPerson.getName());
 
@@ -284,6 +325,10 @@ public class PeopleConsumer {
 
         } catch (Exception e) {
             logger.error("處理新增角色請求失敗: {}", e.getMessage(), e);
+
+            // 業務 transaction 已回滾，failed 事件另開 transaction 記錄
+            businessEvents.recordFailedQuietly(BusinessEventType.PEOPLE_INSERT,
+                    BusinessEventType.AGGREGATE_PEOPLE, null, message.getRequestId(), e);
 
             // 發送錯誤結果給 Producer
             try {
@@ -353,11 +398,25 @@ public class PeopleConsumer {
 
             logger.info("成功批量新增角色: requestId={}, count={}", requestId, savedPeople.size());
 
+            // saveAllPeople 刻意不加 @Transactional 以允許多連線並發，無法納入單一 transaction，
+            // 因此事件在寫入成功之後以獨立 transaction 記錄（保證較弱，見 BusinessEventTransaction）。
+            businessEvents.recordAfter(
+                    BusinessEventType.PEOPLE_INSERT_MULTIPLE,
+                    BusinessEventType.AGGREGATE_PEOPLE,
+                    null,
+                    requestId,
+                    Map.of("count", savedPeople.size(),
+                            "names", savedPeople.stream().map(People::getName).toList()))
+                    .block();
+
             // 發送成功結果給 Producer
             asyncResultService.sendCompletedResult(requestId, savedPeople);
 
         } catch (Exception e) {
             logger.error("處理批量新增角色請求失敗: {}", e.getMessage(), e);
+
+            businessEvents.recordFailedQuietly(BusinessEventType.PEOPLE_INSERT_MULTIPLE,
+                    BusinessEventType.AGGREGATE_PEOPLE, null, message.getRequestId(), e);
 
             // 發送錯誤結果給 Producer
             try {

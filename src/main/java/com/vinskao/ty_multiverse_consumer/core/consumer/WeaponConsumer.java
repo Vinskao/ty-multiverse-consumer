@@ -11,8 +11,12 @@ import com.vinskao.ty_multiverse_consumer.core.dto.AsyncMessageDTO;
 import com.vinskao.ty_multiverse_consumer.core.service.AsyncResultService;
 import com.vinskao.ty_multiverse_consumer.module.weapon.domain.vo.Weapon;
 import com.vinskao.ty_multiverse_consumer.module.weapon.service.WeaponService;
+import com.vinskao.ty_multiverse_consumer.core.event.BusinessEventPayloads;
+import com.vinskao.ty_multiverse_consumer.core.event.BusinessEventTransaction;
+import tw.com.ty.common.event.BusinessEventType;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * Weapon 請求處理 Consumer
@@ -40,6 +44,12 @@ public class WeaponConsumer {
     
     @Autowired
     private AsyncResultService asyncResultService;
+
+    @Autowired
+    private BusinessEventTransaction businessEvents;
+
+    @Autowired
+    private BusinessEventPayloads payloads;
     
     /**
      * 監聽 Weapon 獲取所有請求
@@ -179,8 +189,20 @@ public class WeaponConsumer {
             
             logger.info("開始保存武器: name={}, requestId={}", weapon.getName(), requestId);
             
-            // 處理請求
-            Weapon savedWeapon = weaponService.saveWeapon(weapon).block();
+            // 處理請求：先讀出 before 快照，與寫入和 outbox 事件同屬一個 transaction
+            Weapon savedWeapon = businessEvents.withSucceededEvent(
+                    weaponService.getWeaponById(weapon.getName())
+                            .map(payloads::snapshot)
+                            .defaultIfEmpty(Map.of())
+                            .flatMap(before -> weaponService.saveWeapon(weapon)
+                                    .map(after -> new BusinessEventPayloads.Change<>(before, after))),
+                    BusinessEventType.WEAPON_SAVE,
+                    BusinessEventType.AGGREGATE_WEAPON,
+                    change -> change.after().getName(),
+                    change -> payloads.diff(change.before(), change.after()),
+                    requestId)
+                    .map(BusinessEventPayloads.Change::after)
+                    .block();
             
             logger.info("成功保存武器: name={}, requestId={}", savedWeapon.getName(), requestId);
             
@@ -192,6 +214,9 @@ public class WeaponConsumer {
             
         } catch (Exception e) {
             logger.error("處理保存武器請求失敗: {}", e.getMessage(), e);
+
+            businessEvents.recordFailedQuietly(BusinessEventType.WEAPON_SAVE,
+                    BusinessEventType.AGGREGATE_WEAPON, null, message.getRequestId(), e);
             
             // 發送錯誤結果給 Producer
             try {
@@ -218,8 +243,15 @@ public class WeaponConsumer {
             
             logger.info("開始刪除武器: name={}, requestId={}", name, requestId);
             
-            // 處理請求
-            weaponService.deleteWeapon(name);
+            // 處理請求（修正：原本沒有訂閱回傳的 Mono，刪除其實不會執行）
+            // 刪除與 outbox 事件在同一個 transaction 內完成
+            businessEvents.withSucceededEvent(
+                    weaponService.deleteWeapon(name),
+                    BusinessEventType.WEAPON_DELETE,
+                    BusinessEventType.AGGREGATE_WEAPON,
+                    name,
+                    Map.of("weapon", name),
+                    requestId).block();
             
             logger.info("成功刪除武器: name={}, requestId={}", name, requestId);
             
@@ -231,6 +263,9 @@ public class WeaponConsumer {
             
         } catch (Exception e) {
             logger.error("處理刪除武器請求失敗: {}", e.getMessage(), e);
+
+            businessEvents.recordFailedQuietly(BusinessEventType.WEAPON_DELETE,
+                    BusinessEventType.AGGREGATE_WEAPON, null, message.getRequestId(), e);
             
             // 發送錯誤結果給 Producer
             try {
@@ -256,8 +291,14 @@ public class WeaponConsumer {
             
             logger.info("開始刪除所有武器: requestId={}", requestId);
             
-            // 處理請求
-            weaponService.deleteAllWeapons();
+            // 處理請求（修正：原本沒有訂閱回傳的 Mono，刪除其實不會執行）
+            businessEvents.withSucceededEvent(
+                    weaponService.deleteAllWeapons(),
+                    BusinessEventType.WEAPON_DELETE_ALL,
+                    BusinessEventType.AGGREGATE_WEAPON,
+                    null,
+                    Map.of(),
+                    requestId).block();
             
             logger.info("成功刪除所有武器: requestId={}", requestId);
             
@@ -269,6 +310,9 @@ public class WeaponConsumer {
             
         } catch (Exception e) {
             logger.error("處理刪除所有武器請求失敗: {}", e.getMessage(), e);
+
+            businessEvents.recordFailedQuietly(BusinessEventType.WEAPON_DELETE_ALL,
+                    BusinessEventType.AGGREGATE_WEAPON, null, message.getRequestId(), e);
             
             // 發送錯誤結果給 Producer
             try {
