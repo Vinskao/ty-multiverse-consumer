@@ -15,8 +15,8 @@ import org.springframework.context.annotation.Import;
  */
 @Configuration
 @Import({
-    // Exception handling - WebFlux 使用自己的異常處理器
-    // tw.com.ty.common.exception.advice.GlobalExceptionHandler.class (Web MVC only)
+    // Exception handling - 由 common 2.3.0 的 CommonExceptionAutoConfiguration 自動註冊
+    // (WebFlux 會得到 ReactiveExceptionAdvice，不需要在這裡 @Import)
 
     // Response - API 響應格式統一
     // (自動掃描使用 @RestController 的類別)
@@ -36,9 +36,9 @@ public class CommonConfig {
      * 此配置類確保 Consumer 完整使用 common 模組的所有功能：
      *
      * 1. Exception Handling:
-     *    - 使用 Consumer 自有的 WebFlux GlobalExceptionHandler
+     *    - common 的 ReactiveExceptionAdvice（自動註冊，見 common/docs/ERROR_HANDLING.md）
      *    - BusinessException, ErrorCode, ErrorResponse: 統一錯誤格式
-     *    - (common 的 GlobalExceptionHandler 僅適用 Web MVC)
+     *    - 不要再自行宣告 @ExceptionHandler(Exception.class) 的 advice，兩個 catch-all 會讓結果不確定
      *
      * 2. Logging:
      *    - RequestResponseLoggingAspect: 自動記錄請求響應日誌
