@@ -18,10 +18,10 @@ pipeline {
                     tty: true
                     resources:
                       requests:
-                        cpu: "25m"
+                        cpu: "200m"
                         memory: "768Mi"
                       limits:
-                        cpu: "100m"
+                        cpu: "600m"
                         memory: "1024Mi"
                     volumeMounts:
                     - mountPath: /root/.m2
@@ -36,10 +36,10 @@ pipeline {
                       privileged: true
                     resources:
                       requests:
-                        cpu: "10m"
+                        cpu: "100m"
                         memory: "256Mi"
                       limits:
-                        cpu: "50m"
+                        cpu: "300m"
                         memory: "512Mi"
                     env:
                     - name: DOCKER_TLS_CERTDIR
@@ -409,7 +409,6 @@ EOF
                                         # Inspect manifest directory
                                         ls -la k8s/
 
-                                        echo "Recreating deployment ..."
                                         echo "=== Effective sensitive env values ==="
                                         echo "SPRING_DATASOURCE_URL=${SPRING_DATASOURCE_URL}"
                                         echo "SPRING_DATASOURCE_HOST=${SPRING_DATASOURCE_HOST}"
@@ -418,7 +417,6 @@ EOF
                                         echo "KEYCLOAK_AUTH_SERVER_URL=${KEYCLOAK_AUTH_SERVER_URL}"
                                         echo "REDIS_HOST=${REDIS_HOST}:${REDIS_CUSTOM_PORT}"
 
-                                        kubectl delete deployment ty-multiverse-consumer -n default --ignore-not-found
                                         envsubst < k8s/deployment.yaml | kubectl apply -f -
                                         kubectl set image deployment/ty-multiverse-consumer ty-multiverse-consumer=${DOCKER_IMAGE}:${DOCKER_TAG} -n default
                                         kubectl rollout status deployment/ty-multiverse-consumer -n default
@@ -426,7 +424,6 @@ EOF
 
                                     // 檢查部署狀態
                                     sh 'kubectl get deployments -n default'
-                                    sh 'kubectl rollout status deployment/ty-multiverse-consumer -n default'
                                 } catch (Exception e) {
                                     echo "Error during deployment: ${e.message}"
                                     // Debug non-ready pods and recent events
