@@ -369,3 +369,7 @@ mvn clean install
 cd ../ty-multiverse-consumer
 mvn clean compile  # 自動使用新版本
 ```
+
+## Jenkins performance
+
+Consumer pipeline cache and diagnosis notes: [docs/JENKINS_PIPELINE_PERFORMANCE.md](docs/JENKINS_PIPELINE_PERFORMANCE.md).

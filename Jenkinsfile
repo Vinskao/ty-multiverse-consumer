@@ -77,7 +77,8 @@ pipeline {
                         memory: "512Mi"
                   volumes:
                   - name: maven-repo
-                    emptyDir: {}
+                    persistentVolumeClaim:
+                      claimName: jenkins-maven-cache
                   - name: workspace-volume
                     emptyDir: {}
             '''

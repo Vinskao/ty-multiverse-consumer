@@ -39,6 +39,17 @@ class JenkinsPipelinePerformanceTests(unittest.TestCase):
         total = sum(container_cpu(name)[0] for name in ('maven', 'docker', 'kubectl', 'jnlp'))
         self.assertLessEqual(total, 140)
 
+    def test_maven_repository_uses_a_persistent_oke_claim(self):
+        self.assertIn('claimName: jenkins-maven-cache', PIPELINE)
+        self.assertIn('mountPath: /root/.m2', PIPELINE)
+
+    def test_maven_cache_claim_definition_uses_rwo_and_is_bounded(self):
+        claim = (ROOT / 'k8s' / 'jenkins-maven-cache-pvc.yaml').read_text(encoding='utf-8')
+        self.assertIn('name: jenkins-maven-cache', claim)
+        self.assertIn('storageClassName: oci-bv', claim)
+        self.assertIn('- ReadWriteOnce', claim)
+        self.assertIn('storage: 5Gi', claim)
+
     def test_rollout_is_waited_for_once(self):
         self.assertEqual(PIPELINE.count('kubectl rollout status deployment/ty-multiverse-consumer'), 1)
 
