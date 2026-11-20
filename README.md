@@ -32,6 +32,92 @@
 
 ## Architecture
 
+### 整體架構
+
+本服務在 TY Multiverse 中負責消費 Backend 透過 RabbitMQ 送來的 People／Weapon 非同步請求，以 R2DBC 存取 PostgreSQL、以 Redis 做快取與冪等，處理結果回送 `async-result`，並以 Transactional Outbox 發布業務事件。
+
+```mermaid
+graph LR
+    Backend["TY Backend (producer)"]
+
+    subgraph MQ["RabbitMQ"]
+        MainEx["tymb-exchange"]
+        PeopleQ["people-* / damage-calculation queues"]
+        WeaponQ["weapon-* queues"]
+        ResultQ["async-result queue"]
+        EventEx["tymb-event-exchange"]
+        EventStream["tymb-events stream"]
+    end
+
+    subgraph Consumer["ty-multiverse-consumer (WebFlux, port 8081)"]
+        App["TyMultiverseConsumerApplication"]
+        RPC["ReactivePeopleConsumer"]
+        RWC["ReactiveWeaponConsumer"]
+        Legacy["PeopleConsumer / WeaponConsumer (legacy, Spring AMQP)"]
+        ARC["ReactiveAsyncResultConsumer (monitor)"]
+        Ctrl["REST: /people, /people-images, /weapons"]
+        PeopleSvc["PeopleService / WeaponDamageService"]
+        WeaponSvc["WeaponService"]
+        ResultSvc["AsyncResultService"]
+        Recorder["BusinessEventTransaction / BusinessEventRecorder"]
+        Publisher["BusinessEventPublisher (@Scheduled outbox poll)"]
+        Cache["RedisService / ResourceCacheManager"]
+        Actuator["Actuator health probes"]
+    end
+
+    DB[("PostgreSQL (R2DBC)")]
+    Redis[("Redis")]
+    Common["ty-multiverse-common (error handling, AOP logging)"]
+
+    Backend -->|"AMQP publish"| MainEx
+    MainEx --> PeopleQ
+    MainEx --> WeaponQ
+    PeopleQ -->|"consumeManualAck"| RPC
+    WeaponQ -->|"consumeManualAck"| RWC
+    PeopleQ -.->|"legacy.enabled"| Legacy
+    WeaponQ -.->|"legacy.enabled"| Legacy
+    Legacy --> PeopleSvc
+    Legacy --> WeaponSvc
+    RPC --> PeopleSvc
+    RWC --> WeaponSvc
+    Ctrl --> PeopleSvc
+    Ctrl --> WeaponSvc
+    PeopleSvc --> DB
+    WeaponSvc --> DB
+    RPC --> Cache
+    Cache --> Redis
+    RPC --> ResultSvc
+    RWC --> ResultSvc
+    ResultSvc -->|"routing async.result"| MainEx
+    MainEx --> ResultQ
+    ResultQ --> ARC
+    Legacy --> Recorder
+    Recorder -->|"outbox table"| DB
+    Publisher -->|"poll unpublished"| DB
+    Publisher -->|"publisher confirm"| EventEx
+    EventEx -->|"event.#"| EventStream
+    App --> Common
+```
+
+### Transactional Outbox（`core/event/`）
+
+```mermaid
+sequenceDiagram
+    participant Svc as PeopleConsumer / WeaponConsumer
+    participant Rec as BusinessEventRecorder
+    participant DB as PostgreSQL outbox
+    participant Pub as BusinessEventPublisher
+    participant Ex as tymb-event-exchange
+    Svc->>Rec: record event via BusinessEventTransaction
+    Rec->>DB: INSERT outbox row
+    loop every poll-interval-ms
+        Pub->>DB: fetch unpublished batch
+        Pub->>Ex: send(routingKey event.*)
+        Ex-->>Pub: publisher confirm
+        Pub->>DB: set published_at / backoff on failure
+    end
+```
+
 ### Reactive Streams 觀察者模式
 
 | 介面 | 角色 | 專案實現 |
